@@ -1,41 +1,48 @@
 #!/bin/bash
 # Turns a fresh RetroPie box (built by install-retropie.sh) into Super RetroPie.
-# Run as root:  sudo bash restore-super-retropie.sh [--keep-network]
-#   --keep-network   do not apply the static 10.5.0.19 address / hostname (e.g. a second box)
+# Run as root:  sudo bash restore-super-retropie.sh [--keep-network] [--no-bezels]
+#   --keep-network   do not apply the kit's static address / hostname (e.g. a second box).
+#                    Automatic when the kit has no network settings (the public git repo).
+#   --no-bezels      skip The Bezel Project download (several GB; run ~/install-bezels.py later)
 # Log: /var/log/super-retropie-restore.log
 #
 # What it does
 #   1. extra Ubuntu packages (music, menus, boot screen, streaming, file sharing)
 #   2. every emulator the Super RetroPie box has (packages.txt), xemu and Sunshine
 #   3. the bluray theme, then all Super RetroPie files (files.tar.gz) on top
-#   4. switches on the timers/services, boot screen, hostname
+#   4. downloads: RetroArch cheat database, console startup sounds, game bezels
+#   5. switches on the timers/services, boot screen, hostname
 # Not in the kit (private or too big): games, BIOS, saves, Wii U keys, Sunshine pairing.
 # Saves/BIOS/artwork come back from the nightly Proxmox backup - see README.md.
 set -u
 KIT=$(cd "$(dirname "$0")" && pwd)
 U=pi; H=/home/$U
-KEEP_NET=0; [ "${1:-}" = --keep-network ] && KEEP_NET=1
+KEEP_NET=0; BEZELS=1
+for a in "$@"; do case $a in --keep-network) KEEP_NET=1 ;; --no-bezels) BEZELS=0 ;; esac; done
 exec > >(tee -a /var/log/super-retropie-restore.log) 2>&1
 step() { echo; echo "=== $(date '+%T') $*"; }
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 
-# From a git checkout there is no files.tar.gz - pack it from the repo's box/ folder
+# From a git checkout there is no files.tar.gz - pack the repo's box/ folder (fresh every run)
+FILES=$KIT/files.tar.gz
 BOX=$(cd "$KIT/../../../.." 2>/dev/null && pwd)/box
-if [ ! -f "$KIT/files.tar.gz" ] && [ -d "$BOX" ]; then
-    step "packing files.tar.gz from $BOX"
-    (cd "$BOX" && tar -czf "$KIT/files.tar.gz" --owner=0 --group=0 *) || { echo "!! packing failed"; exit 1; }
+if [ ! -f "$FILES" ] && [ -d "$BOX" ]; then
+    FILES=$KIT/.box-files.tar.gz
+    step "packing $BOX"
+    (cd "$BOX" && tar -czf "$FILES" --owner=0 --group=0 *) || { echo "!! packing failed"; exit 1; }
 fi
-[ -f "$KIT/files.tar.gz" ] || { echo "no files.tar.gz and no box/ folder"; exit 1; }
+[ -f "$FILES" ] || { echo "no files.tar.gz and no box/ folder"; exit 1; }
+tar -tzf "$FILES" etc/netplan/50-cloud-init.yaml >/dev/null 2>&1 || KEEP_NET=1
 
 step "Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq mpv xdotool feh x11-apps python3-pygame python3-pil ffmpeg p7zip-full rsync \
+apt-get install -y -qq mpv xdotool feh x11-apps python3-pygame python3-pil ffmpeg p7zip-full unzip rsync \
     samba avahi-daemon plymouth plymouth-themes intel-media-va-driver-non-free vainfo git curl || echo "!! some packages failed"
 
 step "RetroPie packages ($(wc -l < "$KIT/packages.txt"))"
 # the Super RetroPie scriptmodules (Cemu, PCSX2) first, so retropie_packages.sh knows them
-tar -C / -xzf "$KIT/files.tar.gz" home/pi/RetroPie-Setup/ext 2>/dev/null
+tar -C / -xzf "$FILES" home/pi/RetroPie-Setup/ext 2>/dev/null
 chown -R $U:$U $H/RetroPie-Setup/ext
 while read -r p; do
     case $p in xemu-appimage) continue ;; esac
@@ -70,15 +77,31 @@ step "bluray theme"
 step "Super RetroPie files"
 NET_FILES=(etc/netplan/50-cloud-init.yaml etc/cloud/cloud.cfg.d/99-disable-network-config.cfg)
 if [ $KEEP_NET = 1 ]; then
-    tar -C / -xzpf "$KIT/files.tar.gz" --same-owner "${NET_FILES[@]/#/--exclude=}"
+    tar -C / -xzpf "$FILES" --same-owner "${NET_FILES[@]/#/--exclude=}"
 else
-    tar -C / -xzpf "$KIT/files.tar.gz" --same-owner
+    tar -C / -xzpf "$FILES" --same-owner
 fi
 chown -R $U:$U $H/.config $H/.local $H/RetroPie $H/RetroPie-Setup/ext /opt/retropie/configs 2>/dev/null
 chown $U:$U $H/*.py $H/*.sh 2>/dev/null
 chmod 755 /usr/local/bin/*
 [ -e /usr/local/bin/Skyscraper ] || [ ! -x /opt/retropie/supplementary/skyscraper/Skyscraper ] ||
     ln -s /opt/retropie/supplementary/skyscraper/Skyscraper /usr/local/bin/Skyscraper
+
+step "downloads (cheats, startup sounds, bezels)"
+DB=/opt/retropie/configs/all/retroarch/cheats-db
+if [ ! -d "$DB/Sony - PlayStation" ]; then
+    rm -rf /tmp/cheats && mkdir -p /tmp/cheats &&
+    curl -fsSL -o /tmp/cheats.zip https://buildbot.libretro.com/assets/frontend/cheats.zip &&
+    unzip -q -o /tmp/cheats.zip -d /tmp/cheats && {
+        SRC=/tmp/cheats; [ -d "$SRC/Sony - PlayStation" ] || SRC=$(dirname "$(find /tmp/cheats -maxdepth 3 -type d -name 'Sony - PlayStation' | head -1)")
+        rm -rf "$DB" && mv "$SRC" "$DB" && chown -R $U:$U "$DB" && echo "  cheat database: $(find "$DB" -name '*.cht' | wc -l) files"
+    } || echo "!! cheat database download failed - the Cheats menu stays empty until it is fetched"
+    rm -rf /tmp/cheats /tmp/cheats.zip
+fi
+/usr/local/bin/retropie-get-boot-sounds || echo "!! startup sounds failed - run: sudo retropie-get-boot-sounds"
+if [ $BEZELS = 1 ] && [ -f $H/install-bezels.py ]; then
+    sudo -u $U -H python3 $H/install-bezels.py || echo "!! bezels failed - run: python3 ~/install-bezels.py"
+fi
 
 step "services and timers"
 systemctl daemon-reload

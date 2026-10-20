@@ -1,5 +1,0 @@
-#!/bin/bash
-# RetroPie menu > Game Settings (themed); "Advanced" opens RetroPie's own configuration editor
-python3 /usr/local/bin/retropie-settings
-[ $? -eq 3 ] && sudo /home/pi/RetroPie-Setup/retropie_packages.sh retropiemenu launch /home/pi/RetroPie/retropiemenu-replaced/configedit.rp
-exit 0

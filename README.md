@@ -2,8 +2,8 @@
 
 Turns a small x86 box (built on a Datto Alto) into a living-room console: unattended
 Ubuntu Server 24.04 + RetroPie install from a USB stick, then a set of extras on top -
-themed menus, Search, Save Manager, Play Stats, kid mode, Xbox (xemu) and Wii U (Cemu)
-launchers, Sunshine streaming, controller mappings, per-game settings and nightly backups.
+themed menus, Search, Save Manager with cheats, Play Stats, kid mode, Xbox (xemu) and Wii U
+(Cemu) launchers, Sunshine streaming, controller mappings, per-game settings and nightly backups.
 
 No games, BIOS files, keys or saves are included - bring your own.
 
@@ -11,14 +11,15 @@ No games, BIOS files, keys or saves are included - bring your own.
 
 | Path | What it is |
 |---|---|
-| `box/` | Every Super RetroPie file, at its path on the box (`box/usr/local/bin/...` = `/usr/local/bin/...`) - snapshot of 20 Oct 2026 |
+| `box/` | Every Super RetroPie file, at its path on the box (`box/usr/local/bin/...` = `/usr/local/bin/...`). This is the source of truth - refreshed with `tools/sync-from-box.sh` |
 | `Prepare-RetroPieUsb.ps1` | Builds the bootable autoinstall USB stick (run as admin on Windows) |
 | `Migrate-RetroPie.ps1` | Moves an existing box's setup over to a new one |
 | `usb/nocloud/` | cloud-init seed and the first-boot RetroPie installer |
 | `usb/nocloud/retropie/super-retropie/` | Rebuild kit - see its [README](usb/nocloud/retropie/super-retropie/README.md) |
-| `tools/box-scripts/` | Scripts and services that run on the box |
-| `tools/` | Library import, BIOS, gamelist and maintenance helpers |
+| `tools/sync-from-box.sh` | Pulls a fresh `box/` from the live box, keeping private files out |
+| `tools/build-super-retropie-kit.sh` | Full private snapshot (`files.tar.gz`) for the USB rebuild kit |
 | `tools/proxmox-backup/` | Nightly backup of saves, BIOS and artwork to Proxmox |
+| `tools/migration-2026-10/` | One-off scripts from the October 2026 move to the new box (kept for reference) |
 
 ## Quick start
 
@@ -31,14 +32,22 @@ Boot the box from the stick; it installs, reboots and lands in EmulationStation.
 ## Turning an existing RetroPie (Ubuntu x86) into Super RetroPie
 
 ```bash
-git clone https://github.com/<you>/super-retropie.git && cd super-retropie
-sudo bash usb/nocloud/retropie/super-retropie/restore-super-retropie.sh --keep-network
+git clone https://github.com/chrism544/super-retropie.git && cd super-retropie
+sudo bash usb/nocloud/retropie/super-retropie/restore-super-retropie.sh [--no-bezels]
 ```
 
-`--keep-network` keeps the box's own name and address. The script packs `box/` itself,
-installs the emulators in `packages.txt`, xemu and Sunshine, then lays the files on top.
-Run `~/install-bezels.py` afterwards to fetch The Bezel Project art and per-game bezels.
+The script packs `box/`, installs the emulators in `packages.txt`, xemu and Sunshine, lays the
+files on top, then downloads the RetroArch cheat database, the console startup sounds and
+The Bezel Project art (several GB - `--no-bezels` skips it; run `~/install-bezels.py` later).
+The box keeps its own name and network settings. Reboot when it finishes.
 
-Not in `box/`: games, BIOS, saves, keys, console startup sound recordings, your game lists,
-per-game bezel configs (regenerated), RetroArch's downloadable cheats/assets/shaders, and
-network settings. `tools/build-super-retropie-kit.sh` makes a full private snapshot instead.
+Not in `box/`: games, BIOS, saves, keys, console startup recordings (`sudo retropie-get-boot-sounds`
+fetches them), your game lists, per-game bezel configs (regenerated), RetroArch's downloadable
+cheats/assets/shaders, network settings, and scripts for downloading games or BIOS.
+
+## Keeping this repo up to date
+
+```bash
+tools/sync-from-box.sh            # stage the changes, review with: git diff --cached --stat
+tools/sync-from-box.sh --push     # or commit and push in one go
+```

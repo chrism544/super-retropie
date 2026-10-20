@@ -1,9 +1,0 @@
-[Unit]
-Description=Update xemu (Xbox emulator) to the newest release
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/retropie-update-xemu
-Nice=10

@@ -4,15 +4,20 @@ from pathlib import Path
 
 SOUNDS = Path('/usr/local/share/retropie-splash/sounds')
 CONSOLES = {'playstation':'PlayStation','gamecube':'GameCube','ps2':'PlayStation 2','ps3':'PlayStation 3','xbox':'Xbox','wii':'Wii','wiiu':'Wii U','xbox360':'Xbox 360'}
-CHOICES = [('off','Off'),('console','Match console')] + list(CONSOLES.items())
 
-def resolve(sound, style):
-    if sound == 'console': sound = style
-    if sound not in CONSOLES: return None
+def find(sound):
     for ext in ('.wav', '.mp3'):
         path = SOUNDS / (sound+ext)
         if path.is_file(): return path
     return None
+
+def resolve(sound, style):
+    if sound == 'console': sound = style
+    return find(sound) if sound in CONSOLES else None
+
+# Only offer recordings that are on the box (a fresh build has none until retropie-get-boot-sounds)
+HAVE = [(k, v) for k, v in CONSOLES.items() if find(k)]
+CHOICES = [('off','Off')] + ([('console','Match console')] + HAVE if HAVE else [])
 
 def main():
     os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT','1')

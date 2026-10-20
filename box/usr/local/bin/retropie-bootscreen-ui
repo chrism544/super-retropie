@@ -20,7 +20,7 @@ choices = [('super','Super RetroPie'),('consoles','Consoles'),('minimal','Minima
 choices = [(v,l) for v,l in choices if v == 'off' or (SRC/(v+'.png')).is_file()]
 rows = [
     dict(label='Picture',value=cur,choices=choices,desc='Choose the picture shown during boot and while the game menu loads. Applied when you leave this screen. Existing pictures remain available.'),
-    dict(label='Loading sound',value=config.get('sound','console') if config.get('sound','console') in dict(CHOICES) else 'console',choices=CHOICES,desc='Match console plays the startup sound for the chosen picture. Standard N64 and general RetroPie pictures have no matching sound. You can also choose a console sound separately.'),
+    dict(label='Loading sound',value=config.get('sound','console') if config.get('sound','console') in dict(CHOICES) else ('console' if len(CHOICES) > 1 else 'off'),choices=CHOICES,desc='Match console plays the startup sound for the chosen picture. Standard N64 and general RetroPie pictures have no matching sound. You can also choose a console sound separately.'),
     dict(label='Volume',value=config.get('volume',50),choices=[(25,'25%'),(50,'50%'),(75,'75%'),(100,'100%')],desc='Loading-sound volume. Your normal game volume is unchanged.'),
     dict(label='Play sound',value=config.get('sound_when','startup'),choices=[('startup','Startup only'),('always','Every menu reload')],desc='Startup only plays once per reboot. Every menu reload also plays when EmulationStation restarts.'),
 ]
@@ -41,6 +41,7 @@ def play():
     sound = rows[1]['value']
     path = resolve(sound, rows[0]['value'])
     if path is None:
+        if len(CHOICES) == 1: return 'No startup sounds on this box yet. Run: sudo retropie-get-boot-sounds'
         return 'Sound is off.' if sound == 'off' else 'This picture has no console startup sound. Choose a console picture, or select a sound separately.'
     try:
         if not pygame.mixer.get_init(): pygame.mixer.init()

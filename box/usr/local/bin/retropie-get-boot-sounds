@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Fetch the console startup sounds for the loading screen (they are not shipped - copyrighted).
+
+  sudo retropie-get-boot-sounds          fetch any that are missing
+  sudo retropie-get-boot-sounds --force  fetch them all again
+
+Each source in sounds/sources.json is downloaded, checked against its sha256, then trimmed
+to a 44.1 kHz stereo WAV with ffmpeg. Sounds that fail are skipped; the Boot screen menu
+only offers the ones that are present.
+"""
+import hashlib, json, os, subprocess, sys, tempfile, urllib.request
+from pathlib import Path
+
+SOUNDS = Path('/usr/local/share/retropie-splash/sounds')
+FORCE = '--force' in sys.argv
+
+def fetch(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64)'})
+    with urllib.request.urlopen(req, timeout=30) as r: return r.read()
+
+def main():
+    if os.geteuid() != 0: sys.exit('run with sudo')
+    sources = json.loads((SOUNDS/'sources.json').read_text())
+    ok = 0
+    for name, src in sources.items():
+        out = SOUNDS/(name+'.wav')
+        if out.is_file() and not FORCE: print(f'  {name}: already there'); ok += 1; continue
+        try:
+            data = fetch(src['url'])
+            if hashlib.sha256(data).hexdigest() != src['sha256']: raise ValueError('download changed (sha256 mismatch)')
+            edit = src.get('edit', {})
+            with tempfile.NamedTemporaryFile(suffix='.mp3') as tmp:
+                tmp.write(data); tmp.flush()
+                cut = ['-ss', str(edit.get('start') or 0)] + (['-to', str(edit['end'])] if edit.get('end') else [])
+                subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', tmp.name, *cut,
+                                '-ac', '2', '-ar', '44100', '-c:a', 'pcm_s16le', str(out)], check=True)
+            print(f'  {name}: ok'); ok += 1
+        except Exception as e:
+            print(f'  {name}: skipped - {e}')
+    print(f'{ok}/{len(sources)} startup sounds ready')
+
+if __name__ == '__main__': main()

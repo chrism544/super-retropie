@@ -1,0 +1,106 @@
+{
+  "gamecube": {
+    "page": "https://www.myinstants.com/en/instant/gamecube-startup/",
+    "url": "https://www.myinstants.com/media/sounds/gamecube-startup.mp3",
+    "bytes": 116468,
+    "sha256": "8dc69d56f5b6d04dc07c1c9587a55055d124c8cd8e925761047bb05af405e95f",
+    "edit": {
+      "start": 0.64,
+      "end": 5.4,
+      "format": "PCM WAV",
+      "seconds": 4.76,
+      "sha256": "66b5d937d2f46cbbbcacf72586af4e09cb86672fb03beb09e93ef5172d75fef7"
+    }
+  },
+  "ps3": {
+    "page": "https://www.101soundboards.com/sounds/23991822-ps3-startup",
+    "url": "https://hoovers.101soundboards.com/sb/board_sounds_rendered/yxdbjyy.mp3",
+    "bytes": 227249,
+    "sha256": "69e328b76478b47b0dc6a4a814fb6c87e060d854bed8426e1e68b2c13ec12da8",
+    "edit": {
+      "start": 1.15,
+      "end": 9.7,
+      "format": "PCM WAV",
+      "seconds": 8.55,
+      "sha256": "b67da8705c5da0ad2c7e3de245a4eb06208db38263c4ea8461edb2cb04c821dd"
+    }
+  },
+  "ps2": {
+    "page": "https://www.101soundboards.com/sounds/690101-ps2-startup",
+    "url": "https://hoovers.101soundboards.com/sb/board_sounds_rendered/grbzvg.mp3",
+    "bytes": 184982,
+    "sha256": "1638a5982ffcddfb22d8fc1db3c01764310d678149f1d7c2bca79fa08b9461ff",
+    "edit": {
+      "start": 1.72,
+      "end": 10.85,
+      "format": "PCM WAV",
+      "seconds": 9.13,
+      "sha256": "261c6ec51f250f32343b95556cab9d8a2e5e987553be78091009f7cb7e8dda21"
+    }
+  },
+  "playstation": {
+    "page": "https://www.101soundboards.com/sounds/24123888-playstation-1-startup-sound",
+    "url": "https://hoovers.101soundboards.com/sb/board_sounds_rendered/noojryv.mp3",
+    "bytes": 253999,
+    "sha256": "ef4ffab5a4544d925bf5dd7f26dddb9e0fc5cd70d1738a76213915b277bf64a6",
+    "edit": {
+      "start": 1.65,
+      "end": 14.99,
+      "format": "PCM WAV",
+      "seconds": 13.34,
+      "sha256": "05c215592476ea435ac65eba2f7ad8c0535ae36920974bbddd9c18f7bc5aff15"
+    }
+  },
+  "xbox": {
+    "page": "https://www.myinstants.com/en/instant/xbox-2001-startup-23883/",
+    "url": "https://www.myinstants.com/media/sounds/xbox-2001-startup.mp3",
+    "bytes": 33558,
+    "sha256": "90303e04cbdb59db0a5f92446294445ac426d62df7ad3987e82343527f728b59",
+    "edit": {
+      "start": 0,
+      "end": null,
+      "format": "PCM WAV",
+      "seconds": 8.261,
+      "sha256": "e558e1dc046f9f1e0c140c2a947f7e30c9ba94fa944f076cd3bac7a2cd2b29e6"
+    }
+  },
+  "xbox360": {
+    "page": "https://www.myinstants.com/en/instant/xbox-360-startup-26435/",
+    "url": "https://www.myinstants.com/media/sounds/xbox-360-startup.mp3",
+    "bytes": 133248,
+    "sha256": "fab37cd21939fcb35e1e0da8214edcca0ba4d94f7eef0f7b8611826b5c75ebef",
+    "edit": {
+      "start": 0,
+      "end": null,
+      "format": "PCM WAV",
+      "seconds": 7.863,
+      "sha256": "4c755bfcde1efb81d6f717e32f3ee484904de79c7874e49654a7c0bca782e6d3"
+    }
+  },
+  "wii": {
+    "page": "https://www.myinstants.com/en/instant/wii-startup-sound-1704/",
+    "url": "https://www.myinstants.com/media/sounds/wii-startup-sound.mp3",
+    "bytes": 54981,
+    "sha256": "84678a1893d60fee566b123a74624f3fbd5b846e0661a54192b712840eb0846c",
+    "edit": {
+      "start": 0,
+      "end": null,
+      "format": "PCM WAV",
+      "seconds": 2.842,
+      "sha256": "b959b7c5766bdb45c5d60a94a7403c203cdac0d6925d0825bf87daf513bc1422"
+    }
+  },
+  "wiiu": {
+    "page": "https://www.myinstants.com/en/instant/wii-u-startup-sound-54234/",
+    "url": "https://www.myinstants.com/media/sounds/wii-u-startup-sound-jingle-with-wav-download.mp3",
+    "bytes": 226149,
+    "sha256": "1f31856d5b07a832329406fec590d2343fd384db6d423d7ba80c5fc555018695",
+    "edit": {
+      "start": 0,
+      "end": null,
+      "format": "PCM WAV",
+      "seconds": 14.08,
+      "sha256": "e977036282c54b769ec22b15409a7f5083aac670798a47ba0941cc849d25fb31"
+    }
+  }
+}
