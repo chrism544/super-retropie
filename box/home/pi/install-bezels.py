@@ -8,6 +8,8 @@ the system uses. Games without their own art get the console artwork via the sys
 retroarch.cfg. Style / brightness come from retropie-bezels (RetroPie menu > Game Artwork).
 """
 import os, re, shutil, subprocess, sys, xml.etree.ElementTree as ET
+sys.path.insert(0, '/usr/local/lib/retropie')
+import racfg
 
 HOME = os.path.expanduser('~')
 ROMS = HOME + '/RetroPie/roms'
@@ -139,13 +141,13 @@ for system in ONLY:
         sysdir = os.path.join(OVL, 'SystemBezels'); os.makedirs(sysdir, exist_ok=True)
         target = os.path.join(sysdir, system + '.png'); shutil.copy2(sp, target)
         rc = f'/opt/retropie/configs/{system}/retroarch.cfg'
-        txt = [l for l in open(rc).read().splitlines() if not re.match(r'(# bezel|input_overlay|aspect_ratio_index)', l)]
-        txt += ['# bezel (console artwork for games without their own) - RetroPie menu > Game Artwork',
-                f'input_overlay = "{sysdir}/{system}.cfg"', 'input_overlay_enable = "true"',
-                'input_overlay_opacity = "0.500000"', 'input_overlay_hide_in_menu = "true"']
+        # console artwork (for games without their own) - RetroPie menu > Game Artwork. Written above the
+        # #include line - below it RetroArch ignores any key the global retroarch.cfg also sets.
+        keys = {'input_overlay': f'{sysdir}/{system}.cfg', 'input_overlay_enable': 'true',
+                'input_overlay_opacity': '0.500000', 'input_overlay_hide_in_menu': 'true'}
         if not arcade:
-            txt.append('aspect_ratio_index = "0"')
-        open(rc, 'w').write('\n'.join(txt) + '\n')
+            keys['aspect_ratio_index'] = '0'
+        racfg.set_keys(rc, keys, remove=('aspect_ratio_index',) if arcade else ())
         total_sys += 1
     log(f'  {matched} games with their own artwork, {len(games) - matched} use the console artwork')
     total_game += matched

@@ -189,4 +189,4 @@
 		<playcount>4</playcount>
 		<lastplayed>20261019T212946</lastplayed>
 	</game>
-</gameList>
+<game><path>./companion.sh</path><name>Phone Companion</name><desc>Use your phone on the home Wi-Fi to see what is playing, Play Stats, add games, switch Kid mode and reload the menu. Shows the address, QR code and PIN.</desc><image>./icons/wifi.png</image><genre>Settings</genre></game></gameList>

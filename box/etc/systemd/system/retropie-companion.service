@@ -1,0 +1,14 @@
+[Unit]
+Description=Super RetroPie phone companion page (port 8080, home network only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /usr/local/bin/retropie-companion
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

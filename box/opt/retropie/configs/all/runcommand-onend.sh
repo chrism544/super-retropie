@@ -4,7 +4,7 @@
 DISPLAY=:0 /usr/local/bin/retropie-display-mode
 # Resume any paused RetroPie package build
 sudo -n pkill -CONT -f '[R]etroPie-Setup/tmp/build' 2>/dev/null
-rm -f /tmp/retropie-manual-request; /usr/local/bin/retropie-launchscreen-hide
+rm -f /tmp/retropie-manual-request /tmp/retropie-fresh-request; /usr/local/bin/retropie-launchscreen-hide
 # keep this launch's log (runcommand's terminal is hidden while games start; read them in
 # Game Settings > Advanced: game launch logs). Last 60 kept.
 L=$HOME/.local/share/retropie-launch-logs; mkdir -p "$L"

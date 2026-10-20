@@ -11,14 +11,15 @@ H=/home/pi
   echo /etc/emulationstation/es_systems.cfg
   find /etc/emulationstation/themes/bluray -type f -newermt 2026-10-09
   echo /usr/share/plymouth/themes/super-retropie
-  echo /etc/default/grub; echo /etc/samba/smb.conf; echo /etc/netplan/50-cloud-init.yaml
+  echo /etc/default/grub; echo /etc/samba/smb.conf; echo /etc/smartd.conf; echo /etc/netplan/50-cloud-init.yaml
   echo /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
   find /opt/retropie/configs -type f ! -path "*/skyscraper/*" ! -path "*/retroarch/overlay/*" ! -path "*/downloaded_*" \
        ! -name "es_log*" ! -name "*.bak" ! -name "*.log" ! -name "*.srm" ! -name "*.state*"
   find /opt/retropie/emulators -maxdepth 2 -type f \( -name "*.sh" -o -name "*.py" \)
   ls -d $H/.config/openbox $H/.config/Cemu/controllerProfiles $H/.config/Cemu/gameProfiles $H/.config/mpv \
         $H/.config/retropie-*.json $H/.config/sunshine/sunshine.conf $H/.config/sunshine/apps.json \
-        $H/.config/PCSX2/inis $H/.Xresources $H/.local/share/xemu/xemu/xemu.toml 2>/dev/null
+        $H/.config/PCSX2/inis $H/.Xresources $H/.local/share/xemu/xemu/xemu.toml \
+        $H/.local/bin/retropie-preserve-xbox.py $H/.local/bin/retropie-finalize-snes-art.py 2>/dev/null
   ls -d $H/*.py $H/*.sh 2>/dev/null
   ls -d $H/RetroPie/retropiemenu $H/RetroPie/retropiemenu-replaced $H/RetroPie/searchgames $H/RetroPie/music \
         $H/RetroPie/splashscreens $H/RetroPie-Setup/ext 2>/dev/null

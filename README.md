@@ -7,6 +7,18 @@ themed menus, Search, Save Manager with cheats, Play Stats, kid mode, Xbox (xemu
 
 No games, BIOS files, keys or saves are included - bring your own.
 
+## Highlights
+
+- **Resume where you left off** - RetroArch games carry on from where you quit. Press **X** on the
+  launch screen to start a game fresh instead (the resume point is kept as a backup; saves untouched).
+- **CRT look** - subtle scanlines on the 8/16-bit and arcade consoles; change per console in
+  RetroPie menu > Configuration Editor > Screen effect.
+- **Phone Companion** - open `http://<box address>:8080` in any browser on your home network (or scan
+  the QR code in RetroPie menu > Phone Companion) and enter the PIN shown on the TV: what's playing,
+  Play Stats, upload games into the drop folder, Kid mode, reload the menu.
+- Themed menus, Search, Save Manager with cheats, launch and boot screens, manuals, menu music,
+  Xbox / Xbox 360 / Wii U launchers, Sunshine streaming, nightly artwork scraping and backups.
+
 ## Layout
 
 | Path | What it is |

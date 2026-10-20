@@ -10,6 +10,9 @@ Nintendo logo...) with the game's name, until the game's own window is on screen
 - A is passed on to runcommand's terminal, so it still opens RetroPie's launch menu.
 - Y (read from the pad directly) asks for the game's manual: writes /tmp/retropie-manual-request,
   runcommand-onlaunch.sh shows it before the game starts.
+- X (only when the game has a resume point, <rom>.state.auto) starts the game fresh instead: writes
+  /tmp/retropie-fresh-request, runcommand-onlaunch.sh moves the resume point to .state.auto.before-fresh.
+  Press X again to cancel. In-game saves are not touched.
 - The first SIGINT (end of runcommand's picture delay) is ignored so the screen stays up while
   runcommand waits for the menu key.
 - --daemon: started with the desktop, loads everything once and waits on /tmp/retropie-launchscreen.fifo.
@@ -83,6 +86,9 @@ stem = os.path.splitext(os.path.basename(rom))[0]
 if not manual and os.path.exists(f'{base}media/manuals/{stem}.pdf'):
     manual = f'{base}media/manuals/{stem}.pdf'
 name = re.sub(r'\s*[\(\[].*$', '', name) or name        # "Game (Europe) (En,Fr)" -> "Game"
+resume = os.path.splitext(rom)[0] + '.state.auto'        # RetroArch's resume point, next to the game
+resume = resume if os.path.exists(resume) else None
+FRESH = '/tmp/retropie-fresh-request'
 
 sigints = [0]
 def on_int(*_):
@@ -292,10 +298,14 @@ def draw(t):
     n = name if font(40).size(name)[0] < W - px(200) else name[:60] + '…'
     text(n, 40, c, (CX, H - px(190)), alpha=a)
     text('Loading' + '.' * (int(t * 3) % 4), 26, c, (CX - font(26).size('Loading')[0] // 2, H - px(130)), 'midleft', alpha=a)
-    hints = 'A  Launch options' + ('     Y  Read the manual' if manual else '')
+    fresh = resume and os.path.exists(FRESH)
+    hints = ('A  Launch options' + ('     Y  Read the manual' if manual else '') +
+             ('     X  Continue where you left off' if fresh else '     X  Start fresh' if resume else ''))
     text(hints, 22, c, (px(60), H - px(50)), 'midleft', alpha=a * 0.8)
     if manual and os.path.exists('/tmp/retropie-manual-request'):
         text('The manual opens before the game starts', 26, c, (CX, H - px(250)))
+    if fresh:
+        text('Starting from the beginning - your saves are kept', 26, c, (CX, H - px(290)))
     if t < 0.5:                                   # come up from black like a console switching on
         FADE.set_alpha(int(255 * (1 - ease(t, 0, 0.5)))); screen.blit(FADE, (0, 0))
 
@@ -326,6 +336,9 @@ while time.time() - start < 90:   # closed by retropie-launchscreen-handoff once
     for e in pygame.event.get():
         if e.type == pygame.JOYBUTTONDOWN and e.button == 3 and manual:
             open('/tmp/retropie-manual-request', 'w').write(manual)
+        elif e.type == pygame.JOYBUTTONDOWN and e.button == 2 and resume and not launching[0]:
+            if os.path.exists(FRESH): os.remove(FRESH)
+            else: open(FRESH, 'w').write(resume)
         elif not launching[0] and (e.type == pygame.JOYBUTTONDOWN and e.button == 0) or (e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_SPACE)):
             launch_menu()
     draw(time.time() - start); pygame.display.flip(); clock.tick(30)

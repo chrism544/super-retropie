@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Phone Companion: switch the phone page on/off, show its address, QR code and PIN."""
+import json, os, secrets, socket, subprocess, sys
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+
+CFG = os.path.expanduser('~/.config/retropie-companion.json')
+PORT = 8080
+
+def load():
+    try: return json.load(open(CFG))
+    except Exception: return {'on': True, 'pin': f'{secrets.randbelow(10000):04d}'}
+
+def save(c):
+    os.makedirs(os.path.dirname(CFG), exist_ok=True)
+    tmp = CFG + '.tmp'; json.dump(c, open(tmp, 'w')); os.chmod(tmp, 0o600); os.replace(tmp, CFG)
+
+def address():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(('10.255.255.255', 1)); ip = s.getsockname()[0]; s.close()
+    except OSError:
+        ip = socket.gethostname() + '.local'
+    return f'http://{ip}:{PORT}'
+
+c = load(); save(c)
+url = address()
+
+def qr_surface(size):
+    try:
+        import qrcode
+        q = qrcode.QRCode(border=2); q.add_data(url); q.make(fit=True)
+        m = q.get_matrix(); n = len(m); cell = max(1, size // n)
+        s = pygame.Surface((n * cell, n * cell)); s.fill((255, 255, 255))
+        for y, row in enumerate(m):
+            for x, on in enumerate(row):
+                if on: s.fill((0, 0, 0), (x * cell, y * cell, cell, cell))
+        return s
+    except Exception:
+        return None
+
+def card(i, v):
+    w, h = ui.px(860), ui.px(420)
+    s = pygame.Surface((w, h)); s.fill(ui.PANEL)
+    if not c['on']:
+        t = ui.font(34).render('The phone page is off', True, ui.DIM); s.blit(t, t.get_rect(center=(w // 2, h // 2)))
+        return s
+    q = qr_surface(ui.px(360))
+    if q: s.blit(q, q.get_rect(midleft=(ui.px(30), h // 2)))
+    x = ui.px(430)
+    for txt, size, col, y in (('Scan, or open on your phone:', 26, ui.DIM, 60), (url, 30, ui.TEXT, 100),
+                              ('PIN', 26, ui.DIM, 200), (c['pin'], 72, ui.ACCENT_LT, 235),
+                              ('Phone on the same Wi-Fi', 24, ui.DIM, 345)):
+        s.blit(ui.font(size).render(txt, True, col), (x, ui.px(y)))
+    return s
+
+def new_pin():
+    c['pin'] = f'{secrets.randbelow(10000):04d}'; save(c)
+    restart()
+    return 'New PIN made - phones need to enter it again.'
+
+def restart():
+    subprocess.run(['sudo', '-n', 'systemctl', 'restart' if c['on'] else 'stop', 'retropie-companion.service'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def change(i, v):
+    c['on'] = v == 'on'; save(c); restart()
+    return 'Phone page on.' if c['on'] else 'Phone page off.'
+
+rows = [
+    {'label': 'Phone page', 'value': 'on' if c['on'] else 'off', 'choices': [('on', 'On'), ('off', 'Off')],
+     'desc': 'See what is playing, Play Stats, add games, switch Kid mode and reload the menu from your phone. '
+             'Only works on your home network, and asks for the PIN.'},
+    {'label': 'New PIN', 'action': new_pin, 'desc': 'Makes a new PIN. Any phone that was connected has to enter the new one.'},
+]
+ui.options_screen('SETTINGS', 'Phone Companion', rows, change, card)

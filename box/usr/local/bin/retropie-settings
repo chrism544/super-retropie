@@ -9,6 +9,8 @@ Writes /opt/retropie/configs/all/retroarch.cfg (All consoles) or
 import os, re, sys, time
 os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
 import pygame
+sys.path.insert(0, '/usr/local/lib/retropie')
+import racfg
 
 CONF = '/opt/retropie/configs'
 SH = CONF + '/all/retroarch/shaders/crt/'
@@ -58,18 +60,7 @@ def read(path):
     return vals
 
 def write(path, updates, remove=()):
-    lines = open(path).read().splitlines() if os.path.exists(path) else []
-    done = set()
-    out = []
-    for line in lines:
-        m = re.match(r'\s*([a-z0-9_]+)\s*=', line)
-        if m and m.group(1) in remove:
-            continue
-        if m and m.group(1) in updates:
-            out.append(f'{m.group(1)} = "{updates[m.group(1)]}"'); done.add(m.group(1)); continue
-        out.append(line)
-    out += [f'{k} = "{v}"' for k, v in updates.items() if k not in done]
-    open(path, 'w').write('\n'.join(out) + '\n')
+    racfg.set_keys(path, updates, remove)    # above a console file's #include, or RetroArch ignores it
 
 def current(opt, vals):
     """Which choice the config values match (None = not set)."""

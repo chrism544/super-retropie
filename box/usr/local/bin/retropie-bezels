@@ -14,6 +14,8 @@ Each game with artwork has  <overlay dir>/<Name>.png  (original), and this makes
 (config/<core>/<rom>.cfg, marked "# bezel") is pointed at the chosen one.
 """
 import glob, json, os, re, sys
+sys.path.insert(0, '/usr/local/lib/retropie')
+import racfg
 
 OVL = '/opt/retropie/configs/all/retroarch/overlay/GameBezels'
 CFG = '/opt/retropie/configs/all/retroarch/config'
@@ -69,11 +71,9 @@ def apply(s):
             continue
         png = make_fit(orig_png) if s['style'] == 'fit' else orig_png
         ovl = overlay_cfg(png)
-        lines = [l for l in txt.splitlines() if not re.match(r'(input_overlay|input_overlay_enable|input_overlay_opacity) = ', l)]
-        lines += [f'input_overlay = "{ovl}"',
-                  f'input_overlay_enable = "{"false" if s["style"] == "off" else "true"}"',
-                  f'input_overlay_opacity = "{"0.500000" if s["bright"] == "dim" else "1.000000"}"']
-        open(cfg, 'w').write('\n'.join(lines) + '\n')
+        racfg.set_keys(cfg, {'input_overlay': ovl,          # above a console file's #include, or RetroArch ignores it
+                             'input_overlay_enable': 'false' if s['style'] == 'off' else 'true',
+                             'input_overlay_opacity': '0.500000' if s['bright'] == 'dim' else '1.000000'})
         n += 1
     return n
 

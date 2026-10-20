@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""Super RetroPie phone companion - a small web page on the home network (port 8080).
+
+  What's on now, Play Stats, upload games into the drop folder (retropie-drop-import takes it from
+  there), Kid mode, and reload the game menu. Settings: RetroPie menu > Phone Companion.
+
+  Runs as pi (retropie-companion.service). Only answers addresses on the home network / Tailscale,
+  and asks for the 4-digit PIN shown on the TV. Config: ~/.config/retropie-companion.json
+"""
+import hashlib, hmac, html, ipaddress, json, os, re, secrets, shutil, subprocess, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs, unquote
+
+PORT = 8080
+HOME = os.path.expanduser('~')
+CFG = HOME + '/.config/retropie-companion.json'
+DROP = HOME + '/RetroPie/drop'
+STAGE = HOME + '/RetroPie/.companion-upload'
+PLAYLOG = HOME + '/.local/share/retropie-playtime.jsonl'
+CUR = '/tmp/retropie-playtime-current.json'
+DROPLOG = '/var/log/retropie-drop.log'
+ES_SETTINGS = HOME + '/.emulationstation/es_settings.cfg'
+NAMES = {'arcade': 'Arcade', 'fba': 'FinalBurn', 'mame-libretro': 'MAME', 'neogeo': 'Neo Geo', 'snes': 'Super Nintendo',
+         'nes': 'NES', 'fds': 'Famicom Disk', 'n64': 'Nintendo 64', 'gb': 'Game Boy', 'gbc': 'Game Boy Color',
+         'gba': 'Game Boy Advance', 'nds': 'Nintendo DS', 'gc': 'GameCube', 'wii': 'Wii', 'wiiu': 'Wii U',
+         'megadrive': 'Mega Drive', 'mastersystem': 'Master System', 'gamegear': 'Game Gear', 'segacd': 'Mega-CD',
+         'sega32x': '32X', 'saturn': 'Saturn', 'dreamcast': 'Dreamcast', 'sg-1000': 'SG-1000', 'psx': 'PlayStation',
+         'ps2': 'PlayStation 2', 'psp': 'PSP', 'xbox': 'Xbox', 'xbox360': 'Xbox 360', 'pcengine': 'PC Engine',
+         'atari2600': 'Atari 2600', 'atari5200': 'Atari 5200', 'atari7800': 'Atari 7800', 'atari800': 'Atari 800',
+         'atarilynx': 'Atari Lynx', 'ngp': 'Neo Geo Pocket', 'ngpc': 'Neo Geo Pocket Color', 'msx': 'MSX',
+         'coleco': 'ColecoVision', 'vectrex': 'Vectrex', 'zxspectrum': 'ZX Spectrum', 'amstradcpc': 'Amstrad CPC',
+         'channelf': 'Channel F'}
+NOT_UPLOAD = {'_failed', 'searchgames', 'surprise'}
+TAILSCALE = ipaddress.ip_network('100.64.0.0/10')
+
+def load_cfg():
+    try: c = json.load(open(CFG))
+    except Exception: c = {}
+    changed = False
+    if 'pin' not in c: c['pin'] = f'{secrets.randbelow(10000):04d}'; changed = True
+    if 'secret' not in c: c['secret'] = secrets.token_hex(16); changed = True
+    c.setdefault('on', True)
+    if changed: save_cfg(c)
+    return c
+
+def save_cfg(c):
+    os.makedirs(os.path.dirname(CFG), exist_ok=True)
+    tmp = CFG + '.tmp'; json.dump(c, open(tmp, 'w')); os.chmod(tmp, 0o600); os.replace(tmp, CFG)
+
+def token(c): return hmac.new(c['secret'].encode(), c['pin'].encode(), hashlib.sha256).hexdigest()
+
+def game_running():
+    return subprocess.run(['/usr/local/bin/retropie-game-running']).returncode == 0
+
+def nice_name(rec):
+    n = rec.get('name') or os.path.splitext(os.path.basename(rec.get('rom', '')))[0]
+    return re.sub(r'\s*[\(\[].*$', '', n) or n
+
+def ui_mode():
+    try: m = re.search(r'name="UIMode" value="([^"]*)"', open(ES_SETTINGS).read())
+    except OSError: m = None
+    return m.group(1) if m else 'Full'
+
+def status():
+    now = None
+    try:
+        s = json.load(open(CUR))
+        now = {'name': nice_name(s), 'system': NAMES.get(s['system'], s['system']), 'minutes': int((time.time() - s['start']) // 60)}
+    except Exception:
+        pass
+    systems = sorted((d for d in os.listdir(DROP) if os.path.isdir(f'{DROP}/{d}') and d not in NOT_UPLOAD),
+                     key=lambda d: NAMES.get(d, d).lower())
+    return {'playing': game_running(), 'now': now, 'uimode': ui_mode(),
+            'systems': [[d, NAMES.get(d, d)] for d in systems],
+            'free_gb': round(shutil.disk_usage(DROP).free / 1e9)}
+
+def stats():
+    per, recent, week, total = {}, [], 0.0, 0.0
+    cut = time.time() - 7 * 86400
+    try:
+        for line in open(PLAYLOG):
+            try: r = json.loads(line)
+            except ValueError: continue
+            secs = max(0, r.get('end', 0) - r.get('start', 0)); total += secs
+            if r.get('start', 0) > cut: week += secs
+            k = (r.get('system'), r.get('rom'))
+            p = per.setdefault(k, {'name': nice_name(r), 'system': NAMES.get(r.get('system'), r.get('system')), 'secs': 0, 'last': 0})
+            p['secs'] += secs; p['last'] = max(p['last'], r.get('end', 0))
+            recent.append(r)
+    except OSError:
+        pass
+    top = sorted(per.values(), key=lambda p: -p['secs'])[:10]
+    recent = [{'name': nice_name(r), 'system': NAMES.get(r.get('system'), r.get('system')), 'end': r.get('end', 0),
+               'minutes': round((r.get('end', 0) - r.get('start', 0)) / 60)} for r in recent[-10:][::-1]]
+    return {'total_hours': round(total / 3600, 1), 'week_hours': round(week / 3600, 1), 'games': len(per),
+            'top': [{**p, 'hours': round(p['secs'] / 3600, 1)} for p in top], 'recent': recent}
+
+def imports():
+    lines = []
+    try:
+        with open(DROPLOG, 'rb') as f:
+            f.seek(max(0, os.path.getsize(DROPLOG) - 6000)); lines = f.read().decode(errors='replace').splitlines()[1:]
+    except OSError:
+        pass
+    return {'log': lines[-12:][::-1]}
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = 'SuperRetroPie'
+    fails = {}                       # ip -> (count, until)
+    lock = threading.Lock()
+
+    def log_message(self, *a): pass
+
+    def send(self, code, body, ctype='application/json', headers=()):
+        data = body if isinstance(body, bytes) else (json.dumps(body) if ctype == 'application/json' else body).encode()
+        self.send_response(code)
+        self.send_header('Content-Type', ctype + ('; charset=utf-8' if ctype.startswith('text') else ''))
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Frame-Options', 'DENY')
+        for k, v in headers: self.send_header(k, v)
+        self.end_headers(); self.wfile.write(data)
+
+    def allowed_ip(self):
+        ip = ipaddress.ip_address(self.client_address[0].removeprefix('::ffff:'))
+        return ip.is_private or ip.is_loopback or ip in TAILSCALE
+
+    def authed(self, c):
+        m = re.search(r'(?:^|;\s*)srp=([0-9a-f]{64})', self.headers.get('Cookie', ''))
+        return bool(m) and hmac.compare_digest(m.group(1), token(c))
+
+    def guard(self, need_auth=True, write=False):
+        c = load_cfg()
+        if not c['on'] or not self.allowed_ip():
+            self.send(403, {'error': 'off'}); return None
+        if write and self.headers.get('X-SRP') != '1':          # cross-site forms can't set this header
+            self.send(403, {'error': 'bad request'}); return None
+        if need_auth and not self.authed(c):
+            self.send(401, {'error': 'pin'}); return None
+        return c
+
+    def body_json(self):
+        n = int(self.headers.get('Content-Length') or 0)
+        if n > 10000: return {}
+        try: return json.loads(self.rfile.read(n) or b'{}')
+        except ValueError: return {}
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if path == '/':
+            if self.guard(need_auth=False): self.send(200, PAGE, 'text/html')
+            return
+        c = self.guard()
+        if not c: return
+        if path == '/api/status': self.send(200, status())
+        elif path == '/api/stats': self.send(200, stats())
+        elif path == '/api/imports': self.send(200, imports())
+        else: self.send(404, {'error': 'not found'})
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == '/api/login':
+            c = self.guard(need_auth=False, write=True)
+            if not c: return
+            ip = self.client_address[0]
+            with self.lock:
+                n, until = self.fails.get(ip, (0, 0))
+                if until > time.time():
+                    return self.send(429, {'error': f'Too many tries - wait {int(until - time.time())} seconds'})
+            if hmac.compare_digest(str(self.body_json().get('pin', '')), c['pin']):
+                with self.lock: self.fails.pop(ip, None)
+                return self.send(200, {'ok': True}, headers=[('Set-Cookie', f'srp={token(c)}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict')])
+            with self.lock:
+                n += 1; self.fails[ip] = (n, time.time() + 60 if n >= 5 else 0)
+            return self.send(401, {'error': 'Wrong PIN'})
+        c = self.guard(write=True)
+        if not c: return
+        if path == '/api/kidmode':
+            mode = self.body_json().get('mode')
+            if mode not in ('Full', 'Kiosk', 'Kid'): return self.send(400, {'error': 'unknown mode'})
+            if game_running(): return self.send(409, {'error': 'Someone is playing - try again when the game is closed'})
+            subprocess.run(['/usr/local/bin/retropie-es-set', '--now', f'UIMode=string:{mode}'])
+            return self.send(200, {'ok': True, 'message': f'{mode} mode is on - the menu reloads on the TV'})
+        if path == '/api/reload':
+            if game_running(): return self.send(409, {'error': 'Someone is playing - the menu reloads by itself afterwards'})
+            subprocess.run(['pkill', '-TERM', '-x', 'emulationstatio'])
+            return self.send(200, {'ok': True, 'message': 'The game menu is reloading on the TV'})
+        self.send(404, {'error': 'not found'})
+
+    def do_PUT(self):
+        u = urlparse(self.path)
+        if u.path != '/api/upload': return self.send(404, {'error': 'not found'})
+        if not self.guard(write=True): return
+        q = parse_qs(u.query)
+        system = q.get('system', [''])[0]
+        name = os.path.basename(unquote(q.get('name', [''])[0])).strip()
+        n = int(self.headers.get('Content-Length') or 0)
+        if system in NOT_UPLOAD or not os.path.isdir(f'{DROP}/{system}'):
+            return self.send(400, {'error': 'Choose a console'})
+        if not name or name.startswith('.') or len(name) > 200 or '\0' in name or n <= 0:
+            return self.send(400, {'error': 'Bad file name'})
+        if shutil.disk_usage(DROP).free < n + 2 * 1024 ** 3:
+            return self.send(507, {'error': 'Not enough free space on the box'})
+        os.makedirs(STAGE, exist_ok=True)
+        tmp = f'{STAGE}/{secrets.token_hex(8)}.part'
+        try:
+            with open(tmp, 'wb') as f:
+                left = n
+                while left:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk: raise ConnectionError('upload stopped')
+                    f.write(chunk); left -= len(chunk)
+            dest = f'{DROP}/{system}/{name}'
+            if os.path.exists(dest): raise FileExistsError
+            os.replace(tmp, dest)                              # complete files only - the importer takes it from here
+        except FileExistsError:
+            os.remove(tmp); return self.send(409, {'error': 'That file is already waiting in the drop folder'})
+        except Exception:
+            if os.path.exists(tmp): os.remove(tmp)
+            return
+        self.send(200, {'ok': True, 'message': f'{name} uploaded - it is imported within a few minutes'})
+
+PAGE = r'''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0e1620">
+<title>Super RetroPie</title><style>
+:root{--bg:#070b10;--panel:#0e1620;--line:#1c2a3a;--accent:#116a9d;--accent-lt:#40aae6;--text:#f7f7f7;--dim:#96a5b4;--good:#5ac878;--bad:#e66e6e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 Roboto,system-ui,sans-serif}
+header{padding:20px 16px 8px}header small{color:var(--accent-lt);letter-spacing:.12em;font-weight:600}h1{margin:2px 0 0;font-size:26px}
+nav{display:flex;gap:8px;padding:8px 16px;position:sticky;top:0;background:var(--bg);z-index:1}
+nav button{flex:1;padding:10px 0;border-radius:999px;border:0;background:var(--panel);color:var(--text);font:inherit}
+nav button.on{background:var(--accent)}main{padding:8px 16px 40px;max-width:640px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+.card h2{margin:0 0 8px;font-size:15px;color:var(--accent-lt);letter-spacing:.06em;text-transform:uppercase}
+.big{font-size:22px;font-weight:600}.dim{color:var(--dim)}.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}.nums{display:flex;gap:12px}.nums div{flex:1;text-align:center}.nums b{display:block;font-size:24px}
+select,input[type=file],input[type=tel]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#05080c;color:var(--text);font:inherit;margin:6px 0}
+.btn{display:block;width:100%;padding:13px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-weight:600;margin-top:8px}
+.btn.alt{background:var(--line)}.seg{display:flex;gap:6px}.seg .btn{margin:0}.seg .btn.on{background:var(--accent-lt);color:#05080c}
+.bar{height:10px;background:#05080c;border-radius:5px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:var(--accent-lt)}
+.msg{min-height:1.4em;margin-top:8px}.ok{color:var(--good)}.err{color:var(--bad)}.log{font:12px/1.5 ui-monospace,monospace;color:var(--dim);word-break:break-word}
+.hide{display:none}</style></head><body>
+<header><small>SUPER RETROPIE</small><h1 id="title">Phone companion</h1></header>
+<section id="login" class="hide"><main><div class="card"><h2>Enter PIN</h2>
+<p class="dim">The PIN is on the TV: RetroPie menu &rsaquo; Phone Companion.</p>
+<input id="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4-digit PIN">
+<button class="btn" onclick="login()">Connect</button><div id="lmsg" class="msg err"></div></div></main></section>
+<section id="app" class="hide">
+<nav><button data-t="now" class="on">Now</button><button data-t="upload">Add games</button><button data-t="stats">Stats</button><button data-t="more">More</button></nav>
+<main>
+<div data-p="now"><div class="card"><h2>On the TV</h2><div id="now" class="big">-</div><div id="nowsub" class="dim"></div></div>
+<div class="card"><h2>Recently played</h2><div id="recent"></div></div></div>
+<div data-p="upload" class="hide"><div class="card"><h2>Add games</h2>
+<p class="dim">Use games you have dumped or ripped yourself. They go into the drop folder and appear in the menu a few minutes later. Disc games are converted to CHD automatically.</p>
+<select id="sys"></select><input id="files" type="file" multiple>
+<button class="btn" onclick="upload()">Upload</button><div class="bar"><i id="prog"></i></div><div id="umsg" class="msg"></div>
+<div id="free" class="dim"></div></div>
+<div class="card"><h2>Import log</h2><div id="log" class="log"></div></div></div>
+<div data-p="stats" class="hide"><div class="card nums"><div><b id="wk">-</b><span class="dim">hours this week</span></div><div><b id="tot">-</b><span class="dim">hours in total</span></div><div><b id="gms">-</b><span class="dim">games played</span></div></div>
+<div class="card"><h2>Most played</h2><div id="top"></div></div></div>
+<div data-p="more" class="hide"><div class="card"><h2>Kid mode</h2>
+<p class="dim">Full: everything. Kiosk: play only, no settings. Kid: only kid-friendly games.</p>
+<div class="seg"><button class="btn alt" data-m="Full">Full</button><button class="btn alt" data-m="Kiosk">Kiosk</button><button class="btn alt" data-m="Kid">Kid</button></div>
+<div id="kmsg" class="msg"></div></div>
+<div class="card"><h2>Game menu</h2><p class="dim">Reload the game menu on the TV, e.g. after copying games over the network.</p>
+<button class="btn alt" onclick="reloadMenu()">Reload menu</button><div id="rmsg" class="msg"></div></div></div>
+</main></section>
+<script>
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,o={}){o.headers=Object.assign({'X-SRP':'1'},o.headers||{});const r=await fetch(p,o);
+  if(r.status==401){show(false);throw new Error('pin')}const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Failed');return j}
+function show(app){$('login').classList.toggle('hide',app);$('app').classList.toggle('hide',!app)}
+async function login(){try{await api('/api/login',{method:'POST',body:JSON.stringify({pin:$('pin').value})});show(true);refresh()}catch(e){$('lmsg').textContent=e.message=='pin'?'Wrong PIN':e.message}}
+function ago(t){const m=Math.round((Date.now()/1000-t)/60);return m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' days ago'}
+function msg(id,text,ok){$(id).textContent=text;$(id).className='msg '+(ok?'ok':'err')}
+async function refresh(){const s=await api('/api/status');
+  $('now').textContent=s.now?s.now.name:(s.playing?'A game is running':'Game menu');
+  $('nowsub').textContent=s.now?s.now.system+' · '+s.now.minutes+' min':'Nobody is playing right now';
+  const cur=$('sys').value;$('sys').innerHTML='<option value="">Choose the console…</option>'+s.systems.map(([v,n])=>`<option value="${esc(v)}">${esc(n)}</option>`).join('');$('sys').value=cur;
+  $('free').textContent=s.free_gb+' GB free on the box';
+  document.querySelectorAll('[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m==s.uimode));
+  const st=await api('/api/stats');$('wk').textContent=st.week_hours;$('tot').textContent=st.total_hours;$('gms').textContent=st.games;
+  $('recent').innerHTML=st.recent.map(r=>`<div class="row"><span>${esc(r.name)}<br><small class="dim">${esc(r.system)} · ${r.minutes} min</small></span><small class="dim">${ago(r.end)}</small></div>`).join('')||'<span class="dim">Nothing yet</span>';
+  $('top').innerHTML=st.top.map(r=>`<div class="row"><span>${esc(r.name)}<br><small class="dim">${esc(r.system)}</small></span><b>${r.hours} h</b></div>`).join('')||'<span class="dim">Nothing yet</span>';
+  const l=await api('/api/imports');$('log').innerHTML=l.log.map(esc).join('<br>')||'Nothing imported yet'}
+function put(f,sys){return new Promise((ok,bad)=>{const x=new XMLHttpRequest();x.open('PUT','/api/upload?system='+encodeURIComponent(sys)+'&name='+encodeURIComponent(f.name));
+  x.setRequestHeader('X-SRP','1');x.upload.onprogress=e=>{$('prog').style.width=(e.loaded/e.total*100)+'%'};
+  x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status==200?ok(j):bad(new Error(j.error||'Upload failed'))};x.onerror=()=>bad(new Error('Connection lost'));x.send(f)})}
+async function upload(){const sys=$('sys').value,fs=[...$('files').files];if(!sys)return msg('umsg','Choose the console first');if(!fs.length)return msg('umsg','Choose one or more files');
+  for(const [i,f] of fs.entries()){msg('umsg',`Uploading ${i+1} of ${fs.length}: ${f.name}`,true);try{await put(f,sys)}catch(e){return msg('umsg',f.name+': '+e.message)}}
+  msg('umsg',fs.length+' file(s) uploaded - they appear in the menu within a few minutes',true);$('files').value='';refresh()}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{try{const r=await api('/api/kidmode',{method:'POST',body:JSON.stringify({mode:b.dataset.m})});msg('kmsg',r.message,true);setTimeout(refresh,4000)}catch(e){msg('kmsg',e.message)}});
+async function reloadMenu(){try{msg('rmsg',(await api('/api/reload',{method:'POST'})).message,true)}catch(e){msg('rmsg',e.message)}}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));
+  document.querySelectorAll('[data-p]').forEach(p=>p.classList.toggle('hide',p.dataset.p!=b.dataset.t))});
+$('pin').addEventListener('keydown',e=>{if(e.key=='Enter')login()});
+refresh().then(()=>show(true)).catch(()=>{});setInterval(()=>{if(!$('app').classList.contains('hide'))refresh().catch(()=>{})},15000);
+</script></body></html>'''
+
+if __name__ == '__main__':
+    load_cfg()
+    ThreadingHTTPServer.daemon_threads = True
+    ThreadingHTTPServer(('', PORT), Handler).serve_forever()

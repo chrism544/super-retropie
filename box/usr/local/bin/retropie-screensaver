@@ -33,10 +33,11 @@ rows = [
 ]
 
 def videos_status():
+    # videos EmulationStation can see = <video> entries in the game lists (files alone are not enough)
     n = 0
     for d in os.listdir(os.path.expanduser('~/RetroPie/roms')):
-        v = os.path.expanduser(f'~/RetroPie/roms/{d}/media/videos')
-        if os.path.isdir(v): n += len(os.listdir(v))
+        g = os.path.expanduser(f'~/RetroPie/roms/{d}/gamelist.xml')
+        if os.path.isfile(g): n += open(g, errors='ignore').read().count('<video>')
     return n
 
 def get_videos(scope):
@@ -62,7 +63,9 @@ def on_change(i, v):
     key, typ = rows[i]['key']
     changed[key] = f'{typ}:{v}'
     if key == 'ScreenSaverBehavior' and v == 'random video' and videos_status() == 0:
-        return 'Saved. You have no game videos yet - choose "Get videos" below, until then it shows a black screen.'
+        # with no videos EmulationStation searches endlessly at full CPU - show pictures meanwhile
+        changed[key] = f'{typ}:slideshow'
+        return 'No game videos yet - showing game pictures until you get some with "Get videos" below.'
     return 'Saved - applies when you leave this screen'
 
 def preview(i, v):

@@ -10,6 +10,8 @@
 #    Everything else: ScreenScraper first, then TheGamesDB for whatever it couldn't find.
 # 2. Generate: game lists rebuilt from the cache (Skyscraper keeps favourites/hidden/play counts)
 #    while EmulationStation is held stopped, so it can't save its old lists over the new ones.
+#    Videos and manuals already in the cache stay in the lists (retropie-get-videos, get-manuals.sh).
+#    The timer run only rebuilds systems whose cache changed - if nothing did, the menu is left alone.
 # 3. EmulationStation starts again - never while someone is in a game.
 set -uo pipefail
 exec 9>/tmp/retropie-scrape.lock
@@ -20,7 +22,11 @@ SKY=/opt/retropie/supplementary/skyscraper/Skyscraper
 ROMS=$HOME/RetroPie/roms
 
 FLAGS=unattend,nohints
+GEN_FLAGS=videos,manuals,$FLAGS        # generate only uses the cache, so nothing extra is downloaded
+CACHE=$HOME/.skyscraper/cache
 log() { echo "[$(date '+%F %T')] $*"; }
+cachesum() { md5sum "$CACHE/$1/db.xml" 2>/dev/null | cut -c1-32; }
+local_list() { [ "$1" = xbox ] || [ "$1" = xbox360 ]; }   # entries and covers maintained locally
 
 sources() {
     case $1 in
@@ -46,34 +52,49 @@ fi
 log "start: ${systems[*]}"
 
 # 1. Gather
+changed=()
 for s in "${systems[@]}"; do
-    [ "$s" = xbox ] && continue  # Xbox XISO entries and covers are maintained locally
+    local_list "$s" && continue
+    before=$(cachesum "$s")
     for src in $(sources "$s"); do
         log "gather $s from $src"
         nice "$SKY" -p "$s" -s "$src" --flags "onlymissing,$FLAGS" >/dev/null 2>&1 \
             || log "  $s/$src: finished with errors (platform not covered, or daily limit reached)"
     done
+    # systems named on the command line are always rebuilt
+    if (( $# )) || [ "$(cachesum "$s")" != "$before" ]; then changed+=("$s"); fi
 done
+# Xbox: refresh its local list when asked, or when games arrived after the list was written
+if [[ " ${systems[*]} " == *" xbox "* ]]; then
+    X=$ROMS/xbox
+    if (( $# )) || [ ! -f "$X/gamelist.xml" ] ||
+       [ -n "$(find "$X" -maxdepth 2 -type f ! -name 'gamelist.xml*' -newer "$X/gamelist.xml" -print -quit)" ]; then
+        changed+=(xbox)
+    fi
+fi
+if [ ${#changed[@]} -eq 0 ]; then
+    log "nothing new - game lists and menu left as they are"; exit 0
+fi
 
 # 2. Generate, with EmulationStation held stopped (wait for anyone playing to finish first)
 while retropie-game-running; do sleep 60; done
 touch /tmp/es-hold                     # openbox autostart waits while this exists
 pkill -TERM -x emulationstatio && for i in $(seq 1 20); do pgrep -x emulationstatio >/dev/null || break; sleep 1; done
-for s in "${systems[@]}"; do
+for s in "${changed[@]}"; do
     log "generate $s"
     if [ "$s" = xbox ]; then
         python3 "$HOME/.local/bin/retropie-preserve-xbox.py" || log "  Xbox local metadata refresh failed"
         continue
     fi
-    "$SKY" -p "$s" --flags "$FLAGS" >/dev/null 2>&1 || log "  $s: generate failed"
+    "$SKY" -p "$s" --flags "$GEN_FLAGS" >/dev/null 2>&1 || log "  $s: generate failed"
 done
 # Skyscraper may list the single discs behind a multi-disc .m3u again - hide them
 /usr/local/bin/retropie-multidisc --hide || log "  multi-disc hide failed"
 # Keep arcade tidy (BIOS sets, bootlegs, mahjong/quiz) - hidden flags survive, but re-apply anyway
-[ -x "$HOME/curate-gamelists.py" ] && [[ " ${systems[*]} " == *" arcade "* ]] && python3 "$HOME/curate-gamelists.py" arcade --apply >/dev/null
+[ -x "$HOME/curate-gamelists.py" ] && [[ " ${changed[*]} " == *" arcade "* ]] && python3 "$HOME/curate-gamelists.py" arcade --apply >/dev/null
 
 # Preserve local SNES artwork corrections after cache rendering.
-if [[ " ${systems[*]} " == *" snes "* ]]; then
+if [[ " ${changed[*]} " == *" snes "* ]]; then
     python3 "$HOME/.local/bin/retropie-finalize-snes-art.py" --already-held || log "  local SNES artwork corrections failed"
 fi
 

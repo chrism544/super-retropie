@@ -29,7 +29,10 @@ BOX=$(cd "$KIT/../../../.." 2>/dev/null && pwd)/box
 if [ ! -f "$FILES" ] && [ -d "$BOX" ]; then
     FILES=$KIT/.box-files.tar.gz
     step "packing $BOX"
-    (cd "$BOX" && tar -czf "$FILES" --owner=0 --group=0 *) || { echo "!! packing failed"; exit 1; }
+    # files and links only: folder entries would stamp the checkout's owner/mode onto /home/pi, /etc,
+    # /usr ... (Oct 2026 test: /home/pi became root-owned and group-writable, and SSH refused keys)
+    (cd "$BOX" && find . \( -type f -o -type l \) -printf '%P\n' |
+        tar -czf "$FILES" --owner=0 --group=0 --mode=go-w --no-recursion -T -) || { echo "!! packing failed"; exit 1; }
 fi
 [ -f "$FILES" ] || { echo "no files.tar.gz and no box/ folder"; exit 1; }
 tar -tzf "$FILES" etc/netplan/50-cloud-init.yaml >/dev/null 2>&1 || KEEP_NET=1
@@ -37,7 +40,7 @@ tar -tzf "$FILES" etc/netplan/50-cloud-init.yaml >/dev/null 2>&1 || KEEP_NET=1
 step "Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq mpv xdotool feh x11-apps python3-pygame python3-pil ffmpeg p7zip-full unzip rsync \
+apt-get install -y -qq mpv xdotool feh x11-apps python3-pygame python3-pil ffmpeg p7zip-full unzip rsync python3-qrcode \
     samba avahi-daemon plymouth plymouth-themes intel-media-va-driver-non-free vainfo git curl || echo "!! some packages failed"
 
 step "RetroPie packages ($(wc -l < "$KIT/packages.txt"))"
@@ -45,7 +48,7 @@ step "RetroPie packages ($(wc -l < "$KIT/packages.txt"))"
 tar -C / -xzf "$FILES" home/pi/RetroPie-Setup/ext 2>/dev/null
 chown -R $U:$U $H/RetroPie-Setup/ext
 while read -r p; do
-    case $p in xemu-appimage) continue ;; esac
+    case $p in xemu-appimage|xenia-appimage) continue ;; esac     # not RetroPie packages - installed below
     if [ -d /opt/retropie/emulators/$p ] || [ -d /opt/retropie/libretrocores/$p ] || [ -d /opt/retropie/supplementary/$p ]; then
         echo "  $p already installed"; continue
     fi
@@ -63,10 +66,23 @@ if [ ! -x /opt/retropie/emulators/xemu-appimage/app/AppRun ]; then
     cd "$KIT"
 fi
 
+step "xenia (Xbox 360)"
+XENIA=c28af11; XENIA_SHA=d6b362cdb5d41c58c1dd5f7331949eae0ffb7966e5e9a6146996fdc6d2222115
+XD=$H/.local/share/retropie-xenia/$XENIA          # where xenia-launch.sh runs it from
+if [ ! -x "$XD/squashfs-root/AppRun" ]; then
+    sudo -u $U mkdir -p "$XD" && cd "$XD" &&
+    sudo -u $U curl -fsSL -o xenia_canary_linux.AppImage \
+        "https://github.com/xenia-canary/xenia-canary/releases/download/$XENIA/xenia_canary_linux.AppImage" &&
+    echo "$XENIA_SHA  xenia_canary_linux.AppImage" | sha256sum -c --quiet &&
+    chmod +x xenia_canary_linux.AppImage && sudo -u $U ./xenia_canary_linux.AppImage --appimage-extract >/dev/null ||
+    echo "!! xenia download failed"
+    cd "$KIT"
+fi
+
 step "Sunshine (streaming to Moonlight)"
 if ! dpkg -s sunshine >/dev/null 2>&1; then
-    V=$(awk '/^sunshine /{sub(/-1\+ubuntu.*/,"",$2); print $2}' "$KIT/versions.txt")
-    curl -fsSL -o /tmp/sunshine.deb "https://github.com/LizardByte/Sunshine/releases/download/v$V/sunshine-ubuntu-24.04-amd64.deb" &&
+    V=$(awk '/^sunshine /{print $2}' "$KIT/versions.txt")          # e.g. 2026.914.233613-1+ubuntu24.04
+    curl -fsSL -o /tmp/sunshine.deb "https://github.com/LizardByte/Sunshine/releases/download/v${V%%-*}/sunshine_${V}_amd64.deb" &&
         apt-get install -y -qq /tmp/sunshine.deb || echo "!! Sunshine install failed"
 fi
 
@@ -82,7 +98,7 @@ else
     tar -C / -xzpf "$FILES" --same-owner
 fi
 chown -R $U:$U $H/.config $H/.local $H/RetroPie $H/RetroPie-Setup/ext /opt/retropie/configs 2>/dev/null
-chown $U:$U $H/*.py $H/*.sh 2>/dev/null
+chown $U:$U $H/*.py $H/*.sh $H/.Xresources 2>/dev/null
 chmod 755 /usr/local/bin/*
 [ -e /usr/local/bin/Skyscraper ] || [ ! -x /opt/retropie/supplementary/skyscraper/Skyscraper ] ||
     ln -s /opt/retropie/supplementary/skyscraper/Skyscraper /usr/local/bin/Skyscraper
@@ -106,7 +122,7 @@ fi
 step "services and timers"
 systemctl daemon-reload
 for u in /etc/systemd/system/retropie-*.timer; do systemctl enable "$(basename "$u")"; done
-for s in retropie-soundbar retropie-build-resume retropie-display-hotplug retropie-battery retropie-power-limit; do
+for s in retropie-soundbar retropie-build-resume retropie-display-hotplug retropie-battery retropie-power-limit retropie-companion; do
     [ -f /etc/systemd/system/$s.service ] && systemctl enable $s.service
 done
 udevadm control --reload

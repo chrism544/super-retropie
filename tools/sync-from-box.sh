@@ -7,7 +7,7 @@
 # Kept out of the public repo (rules below):
 #   RetroArch downloads (cheats-db, assets, shaders, cores), per-game bezel configs (install-bezels.py
 #   makes them), backups (*.bak, *.before-*, ...), play history, game lists other than the RetroPie
-#   menu, network settings, console startup recordings (retropie-get-boot-sounds fetches them),
+#   menu, network settings, the phone companion PIN, console startup recordings (retropie-get-boot-sounds fetches them),
 #   and any script that mentions torrents, the download folder or BIOS download sites.
 set -eu
 BOX=pi@10.5.0.19; PUSH=0
@@ -27,7 +27,8 @@ grep -vxF -f /tmp/srp-bezel.txt /tmp/super-retropie-kit/filelist \
  | grep -vE 'retroarch/(cheats-db|assets|shaders|cores)/' \
  | grep -vE '\.(bak|orig|rp-dist|es-scraper-bak)$|\.bak-|\.before-|\.pre-' \
  | grep -vE 'es_temporaryinput\.cfg|content_.*history\.lpl|search-state\.json|^etc/netplan/|^etc/cloud/' \
- | grep -vE 'emulationstation/gamelists/|^usr/local/bin/Skyscraper$' > /tmp/srp-public.txt
+ | grep -vE 'emulationstation/gamelists/|^usr/local/bin/Skyscraper$' \
+ | grep -vE '\.config/retropie-companion\.json' > /tmp/srp-public.txt          # phone page PIN + secret
 echo opt/retropie/configs/all/emulationstation/gamelists/retropie/gamelist.xml >> /tmp/srp-public.txt
 # scripts about downloading games or BIOS stay private
 PRIV='torrent|qbittorrent|\.download-incoming|retropie-downloads|retroarch_system|RetroPieBIOS'
@@ -52,7 +53,8 @@ fi
 
 echo "== update box/"
 git rm -rq --cached box >/dev/null 2>&1 || true
-rm -rf box && mv "$TMP/box" box
+mkdir -p box && find box -mindepth 1 -maxdepth 1 -exec rm -rf {} +    # contents only - on Windows the folder
+cp -a "$TMP/box/." box/                                                  # itself can be held open by a shell
 git add box
 tar -tvzf "$TMP/public.tar.gz" | grep '^-..x' | sed -E 's/^([^ ]+ +){5}//; s|^|box/|' | git update-index --chmod=+x --stdin
 git status --short box | awk '{print $1}' | sort | uniq -c
