@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# Hides Network, Performance, RetroArch Net Play and RetroPie Setup on the RetroPie menu - they now live
-# in Game Settings > Advanced (run with EmulationStation stopped: retropie-es-edit).
+# Hides Boot Screen, Network, Performance, RetroArch Net Play and RetroPie Setup on the RetroPie menu - they
+# live in Game Settings > Advanced (run with EmulationStation stopped: retropie-es-edit). Safe to run again.
 import re, shutil, time
 GL = '/opt/retropie/configs/all/emulationstation/gamelists/retropie/gamelist.xml'
-MOVED = ('./showip.sh', './performance.sh', './retronetplay.rp', './rpsetup.rp')
+MOVED = ('./bootscreen.sh', './showip.sh', './performance.sh', './retronetplay.rp', './rpsetup.rp')
 s = open(GL).read()
 shutil.copy2(GL, GL + '.before-advanced-' + time.strftime('%Y%m%d-%H%M'))
 for path in MOVED:
@@ -17,6 +17,6 @@ for path in MOVED:
 # Game Settings' description mentions the new Advanced section
 s = re.sub(r'(<path>\./configedit\.sh</path>.*?<desc>)(.*?)(</desc>)',
            lambda m: m.group(1) + ('Common game settings for all consoles or one console. Advanced: game launch logs, '
-                                   'network, performance, RetroPie Netplay, RetroPie Setup and every RetroArch setting.') + m.group(3),
+                                   'boot screen, network, performance, RetroArch Net Play, RetroPie Setup and every RetroArch setting.') + m.group(3),
            s, count=1, flags=re.S)
 open(GL, 'w').write(s)

@@ -2,24 +2,29 @@
 """Super RetroPie phone companion - a small web page on the home network (port 8080).
 
   What's on now, Play Stats, upload games into the drop folder (retropie-drop-import takes it from
-  there), Kid mode, and reload the game menu. Settings: RetroPie menu > Phone Companion.
+  there, and the page follows each upload through Importing to Ready to play), viewing mode, and
+  reload the game menu. Settings: RetroPie menu > Phone Companion.
 
   Runs as pi (retropie-companion.service). Only answers addresses on the home network / Tailscale,
   and asks for the 4-digit PIN shown on the TV. Config: ~/.config/retropie-companion.json
 """
-import hashlib, hmac, html, ipaddress, json, os, re, secrets, shutil, subprocess, threading, time
+import hashlib, hmac, ipaddress, json, os, re, secrets, shutil, subprocess, threading, time
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
 PORT = 8080
 HOME = os.path.expanduser('~')
 CFG = HOME + '/.config/retropie-companion.json'
+ROMS = HOME + '/RetroPie/roms'
 DROP = HOME + '/RetroPie/drop'
 STAGE = HOME + '/RetroPie/.companion-upload'
+UPLOADS = HOME + '/.local/share/retropie-companion-uploads.json'
 PLAYLOG = HOME + '/.local/share/retropie-playtime.jsonl'
 CUR = '/tmp/retropie-playtime-current.json'
 DROPLOG = '/var/log/retropie-drop.log'
 ES_SETTINGS = HOME + '/.emulationstation/es_settings.cfg'
+PAGE = '/usr/local/share/super-retropie/companion.html'       # the page itself (read on every visit)
 NAMES = {'arcade': 'Arcade', 'fba': 'FinalBurn', 'mame-libretro': 'MAME', 'neogeo': 'Neo Geo', 'snes': 'Super Nintendo',
          'nes': 'NES', 'fds': 'Famicom Disk', 'n64': 'Nintendo 64', 'gb': 'Game Boy', 'gbc': 'Game Boy Color',
          'gba': 'Game Boy Advance', 'nds': 'Nintendo DS', 'gc': 'GameCube', 'wii': 'Wii', 'wiiu': 'Wii U',
@@ -50,7 +55,15 @@ def save_cfg(c):
 def token(c): return hmac.new(c['secret'].encode(), c['pin'].encode(), hashlib.sha256).hexdigest()
 
 def game_running():
+    """Busy for TV actions: a game, or one of the RetroPie menu screens (retropie-game-running)."""
     return subprocess.run(['/usr/local/bin/retropie-game-running']).returncode == 0
+
+def activity():
+    """What the TV shows: 'playing' (an emulator / runcommand), 'menu' (a RetroPie settings screen) or 'idle'."""
+    pg = lambda pat: subprocess.run(['pgrep', '-f', pat], stdout=subprocess.DEVNULL).returncode == 0
+    if pg(r'[r]uncommand\.sh|[o]pt/retropie/(emulators|libretrocores)/'): return 'playing'
+    if pg(r'[r]etropie-menu-launch|[r]etropie-search-ui|[r]etropiemenu launch'): return 'menu'
+    return 'idle'
 
 def nice_name(rec):
     n = rec.get('name') or os.path.splitext(os.path.basename(rec.get('rom', '')))[0]
@@ -61,6 +74,53 @@ def ui_mode():
     except OSError: m = None
     return m.group(1) if m else 'Full'
 
+_art = {}
+def now_art():
+    """Box art of the game on the TV (from its gamelist), only ever a picture inside the roms folder."""
+    try: s = json.load(open(CUR))
+    except Exception: return None
+    base = f"{ROMS}/{s.get('system', '')}"
+    key = (s.get('rom'), os.path.getmtime(base + '/gamelist.xml') if os.path.exists(base + '/gamelist.xml') else 0)
+    if key not in _art:
+        _art.clear(); _art[key] = None
+        try:
+            for g in ET.parse(base + '/gamelist.xml').getroot().iter('game'):
+                p = g.findtext('path') or ''
+                p = os.path.normpath(os.path.join(base, p[2:]) if p.startswith('./') else p)
+                if p != os.path.normpath(s['rom']): continue
+                img = g.findtext('image') or ''
+                img = os.path.realpath(os.path.join(base, img[2:]) if img.startswith('./') else img)
+                if img.startswith(ROMS + '/') and img.lower().endswith(('.png', '.jpg', '.jpeg')) and os.path.isfile(img):
+                    _art[key] = img
+                break
+        except Exception:
+            pass
+    return _art[key]
+
+DISC = {'psx', 'ps2', 'saturn', 'dreamcast', 'segacd'}     # the importer unpacks / converts these to CHD
+_cache = {}
+def cached(key, stamp, fn):
+    if _cache.get(key, (None,))[0] != stamp: _cache[key] = (stamp, fn())
+    return _cache[key][1]
+
+def extensions():
+    """File types each console takes, from EmulationStation's own list (plus what the importer converts)."""
+    f = '/etc/emulationstation/es_systems.cfg'
+    def read():
+        out = {}
+        for s in ET.parse(f).getroot().iter('system'):
+            exts = {e.lstrip('.').lower() for e in (s.findtext('extension') or '').split() if e.strip('.')}
+            name = s.findtext('name')
+            if name in DISC: exts |= {'cue', 'bin', 'gdi', 'iso', 'zip', '7z'}
+            out[name] = sorted(exts - {'sh'})
+        return out
+    return cached('ext', os.path.getmtime(f), read)
+
+def kid_games():
+    lists = [f'{ROMS}/{d}/gamelist.xml' for d in os.listdir(ROMS) if os.path.isfile(f'{ROMS}/{d}/gamelist.xml')]
+    return cached('kid', sum(os.path.getmtime(g) for g in lists),
+                  lambda: sum(open(g, errors='ignore').read().count('<kidgame>true') for g in lists))
+
 def status():
     now = None
     try:
@@ -68,11 +128,14 @@ def status():
         now = {'name': nice_name(s), 'system': NAMES.get(s['system'], s['system']), 'minutes': int((time.time() - s['start']) // 60)}
     except Exception:
         pass
+    ext = extensions()
     systems = sorted((d for d in os.listdir(DROP) if os.path.isdir(f'{DROP}/{d}') and d not in NOT_UPLOAD),
                      key=lambda d: NAMES.get(d, d).lower())
-    return {'playing': game_running(), 'now': now, 'uimode': ui_mode(),
-            'systems': [[d, NAMES.get(d, d)] for d in systems],
-            'free_gb': round(shutil.disk_usage(DROP).free / 1e9)}
+    act = 'playing' if now else activity()
+    return {'activity': act, 'playing': act == 'playing', 'now': now, 'art': bool(now and now_art()), 'uimode': ui_mode(),
+            'kid_games': kid_games(),
+            'systems': [{'id': d, 'name': NAMES.get(d, d), 'ext': ext.get(d, []), 'disc': d in DISC} for d in systems],
+            'free': shutil.disk_usage(DROP).free - 2 * 1024 ** 3}
 
 def stats():
     per, recent, week, total = {}, [], 0.0, 0.0
@@ -95,14 +158,48 @@ def stats():
     return {'total_hours': round(total / 3600, 1), 'week_hours': round(week / 3600, 1), 'games': len(per),
             'top': [{**p, 'hours': round(p['secs'] / 3600, 1)} for p in top], 'recent': recent}
 
-def imports():
-    lines = []
+def log_tail(size):
     try:
         with open(DROPLOG, 'rb') as f:
-            f.seek(max(0, os.path.getsize(DROPLOG) - 6000)); lines = f.read().decode(errors='replace').splitlines()[1:]
+            f.seek(max(0, os.path.getsize(DROPLOG) - size)); return f.read().decode(errors='replace').splitlines()[1:]
     except OSError:
-        pass
-    return {'log': lines[-12:][::-1]}
+        return []
+
+up_lock = threading.Lock()
+def record_upload(system, name):
+    with up_lock:
+        try: ups = json.load(open(UPLOADS))
+        except Exception: ups = []
+        ups = [u for u in ups if (u['system'], u['name']) != (system, name)][-19:] + [{'system': system, 'name': name, 'time': time.time()}]
+        os.makedirs(os.path.dirname(UPLOADS), exist_ok=True)
+        json.dump(ups, open(UPLOADS, 'w'))
+
+LOGLINE = re.compile(r'\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] (imported|FAILED|converting|unpacked) ([^/ ]+)/(.*)')
+def uploads():
+    """Phone uploads, newest first, followed through the importer's log: importing -> ready / failed."""
+    try: ups = json.load(open(UPLOADS))
+    except Exception: return []
+    lines = log_tail(400000)
+    out = []
+    for u in reversed(ups):
+        s, name = u['system'], u['name']; stem = os.path.splitext(name)[0]
+        if os.path.exists(f'{DROP}/{s}/{name}'):
+            state, detail = 'importing', 'Waiting for the box to pick it up - usually 2 to 4 minutes'
+        else:
+            state, detail = 'importing', 'Importing'
+            for line in lines:                                   # oldest first - the last match wins
+                m = LOGLINE.match(line)
+                if not m or m.group(3) != s: continue
+                if time.mktime(time.strptime(m.group(1), '%Y-%m-%d %H:%M:%S')) < u['time'] - 5: continue
+                kind, rest = m.group(2), m.group(4)
+                fname, why = rest.partition(': ')[::2] if kind == 'FAILED' else (rest.removesuffix(' to CHD').split(' to CHD (')[0], '')
+                if fname != name and not os.path.splitext(fname)[0].startswith(stem): continue
+                state, detail = {'imported': ('ready', 'Ready to play - it is in the game menu'),
+                                 'FAILED': ('failed', why or 'It could not be imported'),
+                                 'converting': ('importing', 'Converting the disc to CHD - this can take a few minutes'),
+                                 'unpacked': ('importing', 'Unpacked - importing what was inside')}[kind]
+        out.append({'system': NAMES.get(s, s), 'name': name, 'time': u['time'], 'state': state, 'detail': detail})
+    return out
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'SuperRetroPie'
@@ -131,7 +228,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def guard(self, need_auth=True, write=False):
         c = load_cfg()
-        if not c['on'] or not self.allowed_ip():
+        if not self.allowed_ip():
+            self.send(403, {'error': 'Only available on your home network'}); return None
+        if not c['on'] and self.path != '/':
             self.send(403, {'error': 'off'}); return None
         if write and self.headers.get('X-SRP') != '1':          # cross-site forms can't set this header
             self.send(403, {'error': 'bad request'}); return None
@@ -148,13 +247,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == '/':
-            if self.guard(need_auth=False): self.send(200, PAGE, 'text/html')
+            if self.guard(need_auth=False): self.send(200, open(PAGE, 'rb').read(), 'text/html')
             return
-        c = self.guard()
-        if not c: return
+        if not self.guard(): return
         if path == '/api/status': self.send(200, status())
         elif path == '/api/stats': self.send(200, stats())
-        elif path == '/api/imports': self.send(200, imports())
+        elif path == '/api/uploads': self.send(200, {'uploads': uploads()})
+        elif path == '/api/art':
+            img = now_art()
+            if not img: return self.send(404, {'error': 'no artwork'})
+            self.send(200, open(img, 'rb').read(), 'image/png' if img.lower().endswith('.png') else 'image/jpeg')
         else: self.send(404, {'error': 'not found'})
 
     def do_POST(self):
@@ -172,15 +274,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {'ok': True}, headers=[('Set-Cookie', f'srp={token(c)}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict')])
             with self.lock:
                 n += 1; self.fails[ip] = (n, time.time() + 60 if n >= 5 else 0)
-            return self.send(401, {'error': 'Wrong PIN'})
-        c = self.guard(write=True)
-        if not c: return
+            return self.send(401, {'error': 'That PIN is not right - check the TV'})
+        if not self.guard(write=True): return
         if path == '/api/kidmode':
             mode = self.body_json().get('mode')
             if mode not in ('Full', 'Kiosk', 'Kid'): return self.send(400, {'error': 'unknown mode'})
             if game_running(): return self.send(409, {'error': 'Someone is playing - try again when the game is closed'})
             subprocess.run(['/usr/local/bin/retropie-es-set', '--now', f'UIMode=string:{mode}'])
-            return self.send(200, {'ok': True, 'message': f'{mode} mode is on - the menu reloads on the TV'})
+            return self.send(200, {'ok': True})
         if path == '/api/reload':
             if game_running(): return self.send(409, {'error': 'Someone is playing - the menu reloads by itself afterwards'})
             subprocess.run(['pkill', '-TERM', '-x', 'emulationstatio'])
@@ -201,6 +302,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {'error': 'Bad file name'})
         if shutil.disk_usage(DROP).free < n + 2 * 1024 ** 3:
             return self.send(507, {'error': 'Not enough free space on the box'})
+        if os.path.exists(f'{DROP}/{system}/{name}'):
+            return self.send(409, {'error': 'Already waiting to be imported'})
         os.makedirs(STAGE, exist_ok=True)
         tmp = f'{STAGE}/{secrets.token_hex(8)}.part'
         try:
@@ -214,87 +317,13 @@ class Handler(BaseHTTPRequestHandler):
             if os.path.exists(dest): raise FileExistsError
             os.replace(tmp, dest)                              # complete files only - the importer takes it from here
         except FileExistsError:
-            os.remove(tmp); return self.send(409, {'error': 'That file is already waiting in the drop folder'})
+            os.remove(tmp); return self.send(409, {'error': 'Already waiting to be imported'})
         except Exception:
             if os.path.exists(tmp): os.remove(tmp)
             return
-        self.send(200, {'ok': True, 'message': f'{name} uploaded - it is imported within a few minutes'})
+        record_upload(system, name)
+        self.send(200, {'ok': True})
 
-PAGE = r'''<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0e1620">
-<title>Super RetroPie</title><style>
-:root{--bg:#070b10;--panel:#0e1620;--line:#1c2a3a;--accent:#116a9d;--accent-lt:#40aae6;--text:#f7f7f7;--dim:#96a5b4;--good:#5ac878;--bad:#e66e6e}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 Roboto,system-ui,sans-serif}
-header{padding:20px 16px 8px}header small{color:var(--accent-lt);letter-spacing:.12em;font-weight:600}h1{margin:2px 0 0;font-size:26px}
-nav{display:flex;gap:8px;padding:8px 16px;position:sticky;top:0;background:var(--bg);z-index:1}
-nav button{flex:1;padding:10px 0;border-radius:999px;border:0;background:var(--panel);color:var(--text);font:inherit}
-nav button.on{background:var(--accent)}main{padding:8px 16px 40px;max-width:640px;margin:0 auto}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
-.card h2{margin:0 0 8px;font-size:15px;color:var(--accent-lt);letter-spacing:.06em;text-transform:uppercase}
-.big{font-size:22px;font-weight:600}.dim{color:var(--dim)}.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line)}
-.row:first-of-type{border-top:0}.nums{display:flex;gap:12px}.nums div{flex:1;text-align:center}.nums b{display:block;font-size:24px}
-select,input[type=file],input[type=tel]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#05080c;color:var(--text);font:inherit;margin:6px 0}
-.btn{display:block;width:100%;padding:13px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-weight:600;margin-top:8px}
-.btn.alt{background:var(--line)}.seg{display:flex;gap:6px}.seg .btn{margin:0}.seg .btn.on{background:var(--accent-lt);color:#05080c}
-.bar{height:10px;background:#05080c;border-radius:5px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:0;background:var(--accent-lt)}
-.msg{min-height:1.4em;margin-top:8px}.ok{color:var(--good)}.err{color:var(--bad)}.log{font:12px/1.5 ui-monospace,monospace;color:var(--dim);word-break:break-word}
-.hide{display:none}</style></head><body>
-<header><small>SUPER RETROPIE</small><h1 id="title">Phone companion</h1></header>
-<section id="login" class="hide"><main><div class="card"><h2>Enter PIN</h2>
-<p class="dim">The PIN is on the TV: RetroPie menu &rsaquo; Phone Companion.</p>
-<input id="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4-digit PIN">
-<button class="btn" onclick="login()">Connect</button><div id="lmsg" class="msg err"></div></div></main></section>
-<section id="app" class="hide">
-<nav><button data-t="now" class="on">Now</button><button data-t="upload">Add games</button><button data-t="stats">Stats</button><button data-t="more">More</button></nav>
-<main>
-<div data-p="now"><div class="card"><h2>On the TV</h2><div id="now" class="big">-</div><div id="nowsub" class="dim"></div></div>
-<div class="card"><h2>Recently played</h2><div id="recent"></div></div></div>
-<div data-p="upload" class="hide"><div class="card"><h2>Add games</h2>
-<p class="dim">Use games you have dumped or ripped yourself. They go into the drop folder and appear in the menu a few minutes later. Disc games are converted to CHD automatically.</p>
-<select id="sys"></select><input id="files" type="file" multiple>
-<button class="btn" onclick="upload()">Upload</button><div class="bar"><i id="prog"></i></div><div id="umsg" class="msg"></div>
-<div id="free" class="dim"></div></div>
-<div class="card"><h2>Import log</h2><div id="log" class="log"></div></div></div>
-<div data-p="stats" class="hide"><div class="card nums"><div><b id="wk">-</b><span class="dim">hours this week</span></div><div><b id="tot">-</b><span class="dim">hours in total</span></div><div><b id="gms">-</b><span class="dim">games played</span></div></div>
-<div class="card"><h2>Most played</h2><div id="top"></div></div></div>
-<div data-p="more" class="hide"><div class="card"><h2>Kid mode</h2>
-<p class="dim">Full: everything. Kiosk: play only, no settings. Kid: only kid-friendly games.</p>
-<div class="seg"><button class="btn alt" data-m="Full">Full</button><button class="btn alt" data-m="Kiosk">Kiosk</button><button class="btn alt" data-m="Kid">Kid</button></div>
-<div id="kmsg" class="msg"></div></div>
-<div class="card"><h2>Game menu</h2><p class="dim">Reload the game menu on the TV, e.g. after copying games over the network.</p>
-<button class="btn alt" onclick="reloadMenu()">Reload menu</button><div id="rmsg" class="msg"></div></div></div>
-</main></section>
-<script>
-const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-async function api(p,o={}){o.headers=Object.assign({'X-SRP':'1'},o.headers||{});const r=await fetch(p,o);
-  if(r.status==401){show(false);throw new Error('pin')}const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Failed');return j}
-function show(app){$('login').classList.toggle('hide',app);$('app').classList.toggle('hide',!app)}
-async function login(){try{await api('/api/login',{method:'POST',body:JSON.stringify({pin:$('pin').value})});show(true);refresh()}catch(e){$('lmsg').textContent=e.message=='pin'?'Wrong PIN':e.message}}
-function ago(t){const m=Math.round((Date.now()/1000-t)/60);return m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' days ago'}
-function msg(id,text,ok){$(id).textContent=text;$(id).className='msg '+(ok?'ok':'err')}
-async function refresh(){const s=await api('/api/status');
-  $('now').textContent=s.now?s.now.name:(s.playing?'A game is running':'Game menu');
-  $('nowsub').textContent=s.now?s.now.system+' · '+s.now.minutes+' min':'Nobody is playing right now';
-  const cur=$('sys').value;$('sys').innerHTML='<option value="">Choose the console…</option>'+s.systems.map(([v,n])=>`<option value="${esc(v)}">${esc(n)}</option>`).join('');$('sys').value=cur;
-  $('free').textContent=s.free_gb+' GB free on the box';
-  document.querySelectorAll('[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m==s.uimode));
-  const st=await api('/api/stats');$('wk').textContent=st.week_hours;$('tot').textContent=st.total_hours;$('gms').textContent=st.games;
-  $('recent').innerHTML=st.recent.map(r=>`<div class="row"><span>${esc(r.name)}<br><small class="dim">${esc(r.system)} · ${r.minutes} min</small></span><small class="dim">${ago(r.end)}</small></div>`).join('')||'<span class="dim">Nothing yet</span>';
-  $('top').innerHTML=st.top.map(r=>`<div class="row"><span>${esc(r.name)}<br><small class="dim">${esc(r.system)}</small></span><b>${r.hours} h</b></div>`).join('')||'<span class="dim">Nothing yet</span>';
-  const l=await api('/api/imports');$('log').innerHTML=l.log.map(esc).join('<br>')||'Nothing imported yet'}
-function put(f,sys){return new Promise((ok,bad)=>{const x=new XMLHttpRequest();x.open('PUT','/api/upload?system='+encodeURIComponent(sys)+'&name='+encodeURIComponent(f.name));
-  x.setRequestHeader('X-SRP','1');x.upload.onprogress=e=>{$('prog').style.width=(e.loaded/e.total*100)+'%'};
-  x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status==200?ok(j):bad(new Error(j.error||'Upload failed'))};x.onerror=()=>bad(new Error('Connection lost'));x.send(f)})}
-async function upload(){const sys=$('sys').value,fs=[...$('files').files];if(!sys)return msg('umsg','Choose the console first');if(!fs.length)return msg('umsg','Choose one or more files');
-  for(const [i,f] of fs.entries()){msg('umsg',`Uploading ${i+1} of ${fs.length}: ${f.name}`,true);try{await put(f,sys)}catch(e){return msg('umsg',f.name+': '+e.message)}}
-  msg('umsg',fs.length+' file(s) uploaded - they appear in the menu within a few minutes',true);$('files').value='';refresh()}
-document.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{try{const r=await api('/api/kidmode',{method:'POST',body:JSON.stringify({mode:b.dataset.m})});msg('kmsg',r.message,true);setTimeout(refresh,4000)}catch(e){msg('kmsg',e.message)}});
-async function reloadMenu(){try{msg('rmsg',(await api('/api/reload',{method:'POST'})).message,true)}catch(e){msg('rmsg',e.message)}}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));
-  document.querySelectorAll('[data-p]').forEach(p=>p.classList.toggle('hide',p.dataset.p!=b.dataset.t))});
-$('pin').addEventListener('keydown',e=>{if(e.key=='Enter')login()});
-refresh().then(()=>show(true)).catch(()=>{});setInterval(()=>{if(!$('app').classList.contains('hide'))refresh().catch(()=>{})},15000);
-</script></body></html>'''
 
 if __name__ == '__main__':
     load_cfg()

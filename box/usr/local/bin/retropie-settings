@@ -211,7 +211,7 @@ while True:
     row = pygame.Rect(px(80), y + px(20), px(760), px(68))
     if sel == len(OPTIONS): pill(row, rad=px(14))
     else: pygame.draw.rect(screen, PANEL, row, border_radius=px(14))
-    text('Advanced: logs, network, performance, setup', 30, TEXT, (row.x + px(28), row.centery), 'midleft')
+    text('Advanced: boot screen, network, more', 30, TEXT, (row.x + px(28), row.centery), 'midleft')
     # description
     dx = px(920)
     if sel < len(OPTIONS):
@@ -219,7 +219,7 @@ while True:
         if scope != 'all':
             desc += ' "Same as all" uses the All consoles setting.'
     else:
-        title, desc = 'Advanced', "Game launch logs, Network, Performance, RetroPie Netplay, RetroPie Setup and every RetroArch setting."
+        title, desc = 'Advanced', "Game launch logs, Boot Screen, Network, Performance, RetroArch Net Play, RetroPie Setup and every RetroArch setting."
     text(title, 40, ACCENT_LT, (dx, px(285)))
     yy = px(345)
     for line in wrap(desc, 30, W - dx - px(80)):

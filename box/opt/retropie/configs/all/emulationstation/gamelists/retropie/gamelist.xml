@@ -26,7 +26,8 @@
 		<genre>Settings</genre>
 		<developer>Super RetroPie</developer>
 		<players />
-	<hidden>true</hidden></game>
+		<hidden>true</hidden>
+	</game>
 	<game>
 		<path>./rpsetup.rp</path>
 		<name>RetroPie Setup</name>
@@ -35,7 +36,8 @@
 		<genre>Settings</genre>
 		<developer>Super RetroPie</developer>
 		<players />
-	<hidden>true</hidden></game>
+		<hidden>true</hidden>
+	</game>
 	<game>
 		<path>./bluetooth.sh</path>
 		<name>Bluetooth</name>
@@ -62,7 +64,7 @@
 	<game>
 		<path>./configedit.sh</path>
 		<name>Game Settings</name>
-		<desc>Common game settings for all consoles or one console. Advanced: game launch logs, network, performance, RetroPie Netplay, RetroPie Setup and every RetroArch setting.</desc>
+		<desc>Common game settings for all consoles or one console. Advanced: game launch logs, boot screen, network, performance, RetroArch Net Play, RetroPie Setup and every RetroArch setting.</desc>
 		<image>./icons/configedit.png</image>
 		<playcount>1</playcount>
 		<lastplayed>20261017T223343</lastplayed>
@@ -153,40 +155,56 @@
 		<players />
 	</game>
 	<game>
-		<path>./showip.sh</path>
-		<name>Network</name>
-		<desc>Address and connection status, live download/upload speed, internet speed test, and automatic (DHCP) or fixed IP settings.</desc>
-		<image>./icons/showip.png</image>
-		<playcount>3</playcount>
-		<lastplayed>20261018T194619</lastplayed>
-		<genre>Settings</genre>
-		<developer>Super RetroPie</developer>
-		<players />
-	<hidden>true</hidden></game>
-	<game>
-		<path>./gamehelp.sh</path>
-		<name>Game Help</name>
-		<desc>Where to go next in Zelda - A Link to the Past, read from your save: next dungeon and how to get there, dungeon checklist and missing items.</desc>
-		<image>/home/pi/RetroPie/retropiemenu/icons/showip.png</image>
-		<genre>Settings</genre>
-		<developer>Super RetroPie</developer>
-		<players />
-	</game>
-	<game>
-		<path>./performance.sh</path>
-		<name>Performance</name>
-		<desc>Processor power mode (Cool, Standard, or Performance for faster Xbox, PS2 and Wii games), live temperature and fan speed, and automatic Xbox emulator updates.</desc>
-		<image>/home/pi/RetroPie/retropiemenu/icons/rpsetup.png</image>
-	<hidden>true</hidden></game>
-	<game>
 		<path>./bootscreen.sh</path>
 		<name>Boot Screen</name>
 		<desc>Choose the picture shown while the box starts up and while EmulationStation loads - with a preview.</desc>
 		<image>./icons/splashscreen.png</image>
 		<developer>Super RetroPie</developer>
 		<genre>Settings</genre>
-		<players></players>
-		<playcount>4</playcount>
-		<lastplayed>20261019T212946</lastplayed>
+		<players />
+		<playcount>5</playcount>
+		<lastplayed>20261020T225302</lastplayed>
+		<hidden>true</hidden>
 	</game>
-<game><path>./companion.sh</path><name>Phone Companion</name><desc>Use your phone on the home Wi-Fi to see what is playing, Play Stats, add games, switch Kid mode and reload the menu. Shows the address, QR code and PIN.</desc><image>./icons/wifi.png</image><genre>Settings</genre></game></gameList>
+	<game>
+		<path>./gamehelp.sh</path>
+		<name>Game Help</name>
+		<desc>Where to go next in Zelda - A Link to the Past, read from your save: next dungeon and how to get there, dungeon checklist and missing items.</desc>
+		<image>./icons/showip.png</image>
+		<developer>Super RetroPie</developer>
+		<genre>Settings</genre>
+		<players />
+		<playcount>1</playcount>
+		<lastplayed>20261020T225005</lastplayed>
+	</game>
+	<game>
+		<path>./performance.sh</path>
+		<name>Performance</name>
+		<desc>Processor power mode (Cool, Standard, or Performance for faster Xbox, PS2 and Wii games), live temperature and fan speed, and automatic Xbox emulator updates.</desc>
+		<image>./icons/rpsetup.png</image>
+		<hidden>true</hidden>
+		<playcount>1</playcount>
+		<lastplayed>20261020T225050</lastplayed>
+	</game>
+	<game>
+		<path>./companion.sh</path>
+		<name>Phone Companion</name>
+		<desc>Use your phone on the home Wi-Fi to see what is playing, Play Stats, add games, switch Kid mode and reload the menu. Shows the address, QR code and PIN.</desc>
+		<image>./icons/wifi.png</image>
+		<genre>Settings</genre>
+		<playcount>1</playcount>
+		<lastplayed>20261020T224756</lastplayed>
+	</game>
+	<game>
+		<path>./showip.sh</path>
+		<name>Network</name>
+		<desc>Address and connection status, live download/upload speed, internet speed test, and automatic (DHCP) or fixed IP settings.</desc>
+		<image>./icons/showip.png</image>
+		<developer>Super RetroPie</developer>
+		<genre>Settings</genre>
+		<players></players>
+		<hidden>true</hidden>
+		<playcount>4</playcount>
+		<lastplayed>20261020T225354</lastplayed>
+	</game>
+</gameList>

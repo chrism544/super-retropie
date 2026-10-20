@@ -1,0 +1,204 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070b10">
+<title>Super RetroPie</title><style>
+:root{--bg:#070b10;--panel:#0e1620;--line:#1c2a3a;--accent:#116a9d;--accent-lt:#40aae6;--text:#f7f7f7;--dim:#a3b3c2;--good:#5ac878;--warn:#e6b450;--bad:#ef7d7d;
+  --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--sb:env(safe-area-inset-bottom,0px)}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.45 Roboto,system-ui,sans-serif;padding-left:var(--sl);padding-right:var(--sr)}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px}
+header{padding-top:max(16px,env(safe-area-inset-top,0px))}header small{color:var(--accent-lt);letter-spacing:.12em;font-weight:600;font-size:.8rem}h1{margin:2px 0 0;font-size:1.6rem}
+.conn{display:flex;align-items:center;gap:8px;padding:6px 0 4px;font-size:.875rem;color:var(--dim)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--dim);flex:none}.conn.ok .dot{background:var(--good)}.conn.bad .dot{background:var(--bad)}.conn.bad{color:var(--bad)}
+.conn button{margin-left:auto}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:5;background:rgba(7,11,16,.97);border-top:1px solid var(--line);
+  padding:6px calc(8px + var(--sr)) calc(6px + var(--sb)) calc(8px + var(--sl));display:flex;justify-content:center}
+nav div{display:flex;gap:4px;width:100%;max-width:640px}
+nav button{flex:1;min-height:52px;padding:6px 2px;border-radius:12px;border:0;background:none;color:var(--dim);font:inherit;font-size:.8rem;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button svg{width:24px;height:24px}nav button[aria-selected=true]{color:var(--text);background:var(--panel)}nav button[aria-selected=true] svg{color:var(--accent-lt)}
+main{padding-bottom:calc(96px + var(--sb))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+.card h2{margin:0 0 10px;font-size:.85rem;color:var(--accent-lt);letter-spacing:.06em;text-transform:uppercase}
+p{margin:0 0 10px}.dim{color:var(--dim)}.big{font-size:1.4rem;font-weight:600;line-height:1.25}.small{font-size:.875rem}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}
+.grow{flex:1;min-width:0}.title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.when{flex:none;white-space:nowrap;color:var(--dim);font-size:.875rem;text-align:right}
+.nums{display:flex;gap:12px}.nums div{flex:1;text-align:center}.nums b{display:block;font-size:1.6rem}.nums span{font-size:.8rem}
+label,.lbl{display:block;font-weight:600;margin:14px 0 6px}
+input[type=search],input[type=password],input[type=text],input[type=file]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#05080c;color:var(--text);font:inherit}
+button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-weight:600;margin-top:12px}
+.btn:disabled,.mode:disabled,.lnk:disabled{opacity:.45;cursor:default}.btn.alt{background:var(--line)}
+.lnk{background:none;border:0;color:var(--accent-lt);font:inherit;padding:6px 4px;min-height:40px;text-decoration:underline}
+.pill{padding:8px 14px;border-radius:999px;border:0;background:var(--accent);color:#fff;font:inherit;font-size:.875rem;min-height:40px}
+:focus-visible{outline:3px solid var(--accent-lt);outline-offset:2px}
+.pinrow{display:flex;gap:8px}.pinrow input{flex:1;width:auto;min-width:0;font-size:1.4rem;letter-spacing:.4em}.pinrow .pill{flex:none}
+.list{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:6px}
+.opt{display:block;width:100%;text-align:left;padding:12px;border:0;border-top:1px solid var(--line);background:#05080c;color:var(--text);font:inherit;min-height:46px}.opt:first-child{border-top:0}
+.chosen{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#0b2233;border:2px solid var(--accent-lt)}
+.guide{margin-top:10px;padding:12px;border-radius:10px;background:#05080c;font-size:.9rem}.guide b{color:var(--accent-lt)}
+.exts{word-break:break-word;color:var(--dim)}
+.modes{display:grid;gap:8px}.mode{display:flex;gap:12px;align-items:center;text-align:left;width:100%;min-height:56px;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:#05080c;color:var(--text);font:inherit}
+.mode[aria-pressed=true]{border-color:var(--accent-lt);background:#0b2233}.mode b{display:block}.mode small{color:var(--dim)}
+.mode .tick{margin-left:auto;flex:none;color:var(--accent-lt);font-weight:700;font-size:.875rem;visibility:hidden}.mode[aria-pressed=true] .tick{visibility:visible}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:600;background:var(--line)}
+.badge.live{background:#123a22;color:var(--good)}.badge.live:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good)}
+.now{display:flex;gap:14px;align-items:center}.now img{width:96px;height:96px;object-fit:contain;border-radius:8px;background:#05080c;flex:none}
+.bar{height:8px;background:#05080c;border-radius:4px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;width:0;background:var(--accent-lt);transition:width .2s}
+.st{font-size:.875rem}.st.ready,.ok{color:var(--good)}.st.failed,.st.blocked,.err{color:var(--bad)}.st.importing,.st.uploading,.st.warn,.warn{color:var(--warn)}
+.msg{min-height:1.4em;margin-top:8px}.note{font-size:.875rem;color:var(--warn);margin-top:8px}.empty{color:var(--dim);font-size:.95rem}
+.sum{margin-top:12px;padding:10px 12px;border-radius:10px;background:#05080c;font-size:.9rem}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media (orientation:landscape) and (max-height:500px){nav button span{display:none}nav button{min-height:44px}main{padding-bottom:calc(72px + var(--sb))}}
+</style></head><body>
+<header class="wrap"><small>SUPER RETROPIE</small><h1>Phone companion</h1>
+<div id="conn" class="conn" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="conntext">Connecting to Super RetroPie…</span><button id="retry" class="pill hide" onclick="start()">Retry</button></div></header>
+
+<section id="login" class="wrap hide"><main><div class="card"><h2>Pair this phone</h2>
+<p class="dim">Enter the PIN shown on the TV: RetroPie menu › Phone Companion.</p>
+<label for="pin">4-digit PIN</label>
+<div class="pinrow"><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code"><button id="pinshow" class="pill" type="button" aria-pressed="false" onclick="togglePin()">Show</button></div>
+<button id="pinbtn" class="btn" onclick="login()">Connect</button><div id="lmsg" class="msg err" role="alert"></div></div></main></section>
+
+<section id="app" class="hide"><main class="wrap">
+<div id="p-now" role="tabpanel" aria-labelledby="t-now">
+ <div class="card"><h2>On the TV</h2><div class="now"><img id="art" class="hide" alt=""><div class="grow"><span id="nowbadge" class="badge">Idle</span><div id="now" class="big" style="margin-top:6px">-</div><div id="nowsub" class="dim"></div></div></div></div>
+ <div class="card"><h2>Recently played</h2><div id="recent"></div></div></div>
+
+<div id="p-upload" role="tabpanel" aria-labelledby="t-upload" class="hide">
+ <div class="card"><h2>Add games</h2>
+ <p class="dim small">Use games you have dumped or ripped yourself. The box imports them by itself after uploading and they appear in the game menu.</p>
+ <span class="lbl" id="sysl">1. Console</span>
+ <div id="pick"><input id="sysq" type="search" placeholder="Search consoles - e.g. snes, playstation" aria-labelledby="sysl" aria-controls="syslist" autocomplete="off">
+  <div id="syslist" class="list" role="listbox" aria-labelledby="sysl"></div></div>
+ <div id="chosen" class="chosen hide"><span class="grow"><b id="chosenname"></b></span><button class="pill" onclick="changeSys()">Change</button></div>
+ <div id="guide" class="guide hide" aria-live="polite"></div>
+ <label for="files">2. Game files</label><input id="files" type="file" multiple disabled aria-describedby="fileshint">
+ <p id="fileshint" class="dim small" style="margin-top:6px">Choose the console first.</p>
+ <div id="sum" class="sum hide" role="status" aria-live="polite"></div>
+ <div id="queue"></div>
+ <button id="upbtn" class="btn" onclick="upload()" disabled>Upload</button>
+ <div id="keep" class="note hide" role="status">Keep this page open until the uploads finish.</div>
+ <div id="qactions" class="hide" style="display:flex;gap:8px;justify-content:space-between"><button id="retryall" class="lnk" onclick="retryFailed()">Retry failed</button><button class="lnk" onclick="clearDone()">Clear finished</button></div>
+ <div id="umsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Your uploads</h2><p class="dim small">Uploaded › Importing › Ready to play. Updates by itself.</p><div id="ups"></div></div></div>
+
+<div id="p-stats" role="tabpanel" aria-labelledby="t-stats" class="hide">
+ <div class="card nums"><div><b id="wk">-</b><span class="dim">hours, last 7 days</span></div><div><b id="tot">-</b><span class="dim">hours in total</span></div><div><b id="gms">-</b><span class="dim">games played</span></div></div>
+ <div class="card"><h2>Most played</h2><div id="top"></div></div></div>
+
+<div id="p-more" role="tabpanel" aria-labelledby="t-more" class="hide">
+ <div class="card"><h2>Who is it for?</h2><p class="dim small">Changing this reloads the game menu on the TV. To switch back on the TV itself, enter your Kid Mode unlock code on the controller.</p>
+ <div class="modes" role="group" aria-label="Viewing mode">
+  <button class="mode" data-m="Full" aria-pressed="false"><span class="grow"><b>Full access</b><small>Everything, including settings</small></span><span class="tick">Current</span></button>
+  <button class="mode" data-m="Kiosk" aria-pressed="false"><span class="grow"><b>Play only</b><small>Any game, but no settings or editing</small></span><span class="tick">Current</span></button>
+  <button class="mode" data-m="Kid" aria-pressed="false"><span class="grow"><b>Kid-friendly</b><small id="kidsub">Only games marked kid-friendly</small></span><span class="tick">Current</span></button>
+ </div><p id="kidinfo" class="dim small" style="margin-top:10px"></p><div id="kmsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Game menu</h2><p class="dim small">Reload the game menu on the TV, for example after copying games over the network.</p>
+ <button id="reloadbtn" class="btn alt" onclick="reloadMenu()">Reload menu</button><div id="rmsg" class="msg" role="alert"></div></div></div>
+</main>
+<nav aria-label="Sections"><div role="tablist">
+ <button role="tab" id="t-now" aria-controls="p-now" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/></svg><span>Now</span></button>
+ <button role="tab" id="t-upload" aria-controls="p-upload" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Add games</span></button>
+ <button role="tab" id="t-stats" aria-controls="p-stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Stats</span></button>
+ <button role="tab" id="t-more" aria-controls="p-more" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Settings</span></button>
+</div></nav></section>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const JUNK=['txt','nfo','url','jpg','jpeg','png','sfv','md5','db','ini','htm','html','pdf'];
+let S=null,busy=false,timer=null,lastOk=0,sys=null,queue=[],seq=0;
+async function api(p,o={}){o.headers=Object.assign({'X-SRP':'1'},o.headers||{});let r;
+  try{r=await fetch(p,o)}catch(e){const x=new Error('Can\'t reach the box - is this phone on the home Wi-Fi?');x.net=true;throw x}
+  const j=await r.json().catch(()=>({}));if(r.status==401){const x=new Error('pin');x.pin=true;throw x}
+  if(r.status==403&&j.error=='off'){const x=new Error('The phone page is switched off on the TV (RetroPie menu › Phone Companion)');x.net=true;throw x}
+  if(!r.ok)throw new Error(j.error||'Something went wrong');return j}
+function conn(state,text){$('conn').className='conn '+state;$('conntext').textContent=text;$('retry').classList.toggle('hide',state!='bad')}
+const hhmm=t=>new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+function ago(t){const m=Math.round((Date.now()/1000-t)/60),d=Math.round(m/1440);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':d==1?'yesterday':d+' days ago'}
+const played=s=>s<3600?Math.max(1,Math.round(s/60))+' min':(s/3600).toFixed(1)+' h';
+function size(b){return b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?Math.round(b/1e6)+' MB':Math.max(1,Math.round(b/1e3))+' KB'}
+function msg(id,text,ok){$(id).textContent=text;$(id).className='msg '+(ok?'ok':'err')}
+function row(title,sub,right){return `<div class="row"><div class="grow"><span class="title">${esc(title)}</span><small class="dim">${esc(sub)}</small></div><span class="when">${right}</span></div>`}
+function show(which){$('login').classList.toggle('hide',which!='login');$('app').classList.toggle('hide',which!='app');if(which=='login')setTimeout(()=>$('pin').focus(),50)}
+async function start(){conn('','Connecting to Super RetroPie…');clearInterval(timer);
+  try{await refresh();show('app')}catch(e){if(e.pin){show('login');conn('ok','Connected - this phone needs pairing')}else conn('bad',e.message)}
+  timer=setInterval(()=>{if(!$('app').classList.contains('hide'))refresh().catch(e=>{if(e.pin)show('login');else conn('bad','Connection lost - showing what we had at '+hhmm(lastOk))})},15000)}
+function togglePin(){const p=$('pin'),on=p.type=='password';p.type=on?'text':'password';$('pinshow').textContent=on?'Hide':'Show';$('pinshow').setAttribute('aria-pressed',on);p.focus()}
+async function login(){$('pinbtn').disabled=true;try{await api('/api/login',{method:'POST',body:JSON.stringify({pin:$('pin').value})});$('lmsg').textContent='';await refresh();show('app')}
+  catch(e){$('lmsg').textContent=e.pin?'That PIN is not right - check the TV':e.message;$('pin').select()}finally{$('pinbtn').disabled=false}}
+async function refresh(){const [s,st,u]=await Promise.all([api('/api/status'),api('/api/stats'),api('/api/uploads')]);S=s;
+  lastOk=Date.now();conn('ok','Connected · updated '+hhmm(lastOk));
+  const A={playing:['Playing',s.now?s.now.name:'A game is running',s.now?`${s.now.system} · playing for ${s.now.minutes} min`:'This game has no details to show'],
+           menu:['In a menu','Settings menu open','Someone is using the RetroPie settings on the TV'],
+           idle:['Idle','Game menu','Nobody is playing right now']}[s.activity];
+  $('nowbadge').textContent=A[0];$('nowbadge').className='badge'+(s.activity=='playing'?' live':'');$('now').textContent=A[1];$('nowsub').textContent=A[2];
+  if(s.art){$('art').src='/api/art?'+encodeURIComponent(s.now.name);$('art').alt='Box art for '+s.now.name;$('art').classList.remove('hide')}else $('art').classList.add('hide');
+  if(!sys)listSystems();draw();
+  document.querySelectorAll('[data-m]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m==s.uimode));
+  const kid=document.querySelector('[data-m=Kid]');kid.disabled=!s.kid_games&&s.uimode!='Kid';
+  $('kidsub').textContent=s.kid_games?`Only the ${s.kid_games.toLocaleString()} games marked kid-friendly`:'No games are marked kid-friendly yet';
+  $('kidinfo').textContent=s.kid_games?'Games are marked from their genre (platform, puzzle, racing, sports, party, educational - not shooting, fighting, gambling or horror) on the TV in RetroPie menu › Kid Mode › Mark kid-friendly games. You can also mark single games there via Select › Edit this game\'s metadata › Kidgame.'
+    :'Kid-friendly would show an empty menu. Mark games first on the TV: RetroPie menu › Kid Mode › Mark kid-friendly games.';
+  $('wk').textContent=st.week_hours;$('tot').textContent=st.total_hours;$('gms').textContent=st.games;
+  $('recent').innerHTML=st.recent.map(r=>row(r.name,`${r.system} · ${r.minutes} min`,ago(r.end))).join('')||'<p class="empty">Nothing played yet. Games show up here once one has been played for a minute or more.</p>';
+  $('top').innerHTML=st.top.map(r=>row(r.name,r.system,'<b>'+played(r.secs)+'</b>')).join('')||'<p class="empty">No play time recorded yet. Your most-played games appear here as you play.</p>';
+  const lab={importing:'Importing',ready:'Ready to play',failed:'Couldn\'t import'};
+  $('ups').innerHTML=u.uploads.map(x=>`<div class="row"><div class="grow"><span class="title">${esc(x.name)}</span><small class="dim">${esc(x.system)} · ${esc(x.detail)}</small></div><span class="when st ${x.state}">${lab[x.state]}</span></div>`).join('')||'<p class="empty">Nothing uploaded from a phone yet. Files you upload are followed here until they are ready to play.</p>'}
+
+/* ---- console picker ---- */
+function listSystems(){if(!S)return;const q=$('sysq').value.trim().toLowerCase();
+  const hits=S.systems.filter(s=>!q||s.name.toLowerCase().includes(q)||s.id.includes(q));
+  $('syslist').innerHTML=hits.map(s=>`<button class="opt" role="option" aria-selected="false" data-id="${esc(s.id)}">${esc(s.name)}</button>`).join('')||'<p class="empty" style="padding:12px">No console matches that.</p>';
+  $('syslist').querySelectorAll('.opt').forEach(b=>b.onclick=()=>chooseSys(b.dataset.id))}
+function chooseSys(id){sys=S.systems.find(s=>s.id==id);$('pick').classList.add('hide');$('chosen').classList.remove('hide');$('chosenname').textContent=sys.name;
+  const disc=sys.disc?`<p style="margin:8px 0 0"><b>Disc games:</b> upload a <b>.cue</b> together with all its <b>.bin</b> tracks${sys.id=='dreamcast'?', or a <b>.gdi</b> with its tracks':''}, or a single <b>.iso</b> / <b>.chd</b>. Zipped discs are unpacked. Everything is converted to CHD.</p>`:'<p style="margin:8px 0 0">Upload one file per game. Zipped cartridge games can stay zipped.</p>';
+  $('guide').innerHTML=`<b>${esc(sys.name)}</b> accepts: <span class="exts">${sys.ext.map(e=>'.'+esc(e)).join(' ')}</span>${disc}`;$('guide').classList.remove('hide');
+  $('files').disabled=false;$('fileshint').textContent='You can choose several files at once.';queue.filter(q=>q.state!='done').forEach(q=>q.sys=sys);check();$('files').focus()}
+function changeSys(){if(busy)return;sys=null;$('pick').classList.remove('hide');$('chosen').classList.add('hide');$('guide').classList.add('hide');$('files').disabled=true;$('fileshint').textContent='Choose the console first.';$('sysq').value='';listSystems();$('sysq').focus();check()}
+$('sysq').addEventListener('input',listSystems);
+
+/* ---- upload queue: checks before sending, per-file progress, retry ---- */
+$('files').addEventListener('change',()=>{for(const f of $('files').files){if(queue.some(q=>q.file.name==f.name&&q.state=='done'&&q.sys.id==sys.id))continue;
+  queue=queue.filter(q=>!(q.file.name==f.name&&q.state!='done'));queue.push({id:++seq,file:f,sys,state:'ready',note:''})}$('files').value='';check()});
+async function check(){const ext=n=>(n.split('.').pop()||'').toLowerCase(),names=new Set(queue.map(q=>q.file.name.toLowerCase()));
+  for(const q of queue){if(q.state=='done'||q.state=='uploading')continue;const e=ext(q.file.name);q.warn=false;q.state=q.state=='failed'?'failed':'ready';q.note=q.state=='failed'?q.note:'';
+    if(JUNK.includes(e)){q.state='blocked';q.note='Not a game file'}
+    else if(q.sys&&!q.sys.ext.includes(e)){q.note=`Not a usual ${q.sys.name} file type - it may not import`;q.warn=true}
+    if(e=='cue'&&q.state!='blocked'){try{const t=await q.file.text();const need=[...t.matchAll(/FILE\s+"([^"]+)"/gi)].map(m=>m[1].split(/[\\/]/).pop());
+      const miss=need.filter(n=>!names.has(n.toLowerCase()));if(miss.length){q.state='blocked';q.note='Also choose: '+miss.join(', ')}}catch(e){}}
+    if(e=='bin'&&q.sys&&q.sys.disc&&!queue.some(o=>ext(o.file.name)=='cue')){q.note='Upload its .cue file too, or it can\'t be imported';q.warn=true}}
+  draw()}
+function draw(){const todo=queue.filter(q=>q.state=='ready'||q.state=='failed'),total=todo.reduce((a,q)=>a+q.file.size,0),free=S?S.free:Infinity;
+  const blocked=queue.filter(q=>q.state=='blocked').length,space=total>free;
+  $('queue').innerHTML=queue.map(q=>{const lab={ready:q.warn?'Check':'Ready',uploading:'Uploading',done:'Uploaded ✓',failed:'Failed',blocked:'Can\'t upload'}[q.state];
+    return `<div class="row"><div class="grow"><span class="title">${esc(q.file.name)}</span><small class="${q.state=='blocked'||q.state=='failed'?'err':q.warn?'warn':'dim'}">${esc(q.sys?q.sys.name:'')} · ${size(q.file.size)}${q.note?' · '+esc(q.note):''}</small>${q.state=='uploading'?`<div class="bar" role="progressbar" aria-label="Uploading ${esc(q.file.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${q.pct||0}"><i style="width:${q.pct||0}%"></i></div>`:''}</div>
+    <span class="when"><span class="st ${q.state=='done'?'ready':q.state=='ready'&&q.warn?'warn':q.state}">${q.state=='uploading'?(q.pct||0)+'%':lab}</span>${q.state=='failed'&&!busy?` <button class="lnk" onclick="retryOne(${q.id})">Retry</button>`:''}${q.state!='uploading'&&q.state!='done'&&!busy?` <button class="lnk" aria-label="Remove ${esc(q.file.name)}" onclick="removeOne(${q.id})">Remove</button>`:''}</span></div>`}).join('');
+  $('sum').classList.toggle('hide',!queue.length);
+  $('sum').innerHTML=queue.length?`${todo.length} file${todo.length==1?'':'s'} to upload · ${size(total)} · ${S?size(Math.max(0,S.free))+' free on the box':''}${space?'<br><span class="err">Not enough space on the box for these.</span>':''}${blocked?`<br><span class="err">${blocked} file${blocked==1?'':'s'} can't be uploaded - see below.</span>`:''}`:'';
+  const failed=queue.filter(q=>q.state=='failed').length;$('qactions').classList.toggle('hide',busy||!queue.some(q=>q.state=='done'||q.state=='failed'));$('retryall').classList.toggle('hide',!failed);
+  $('upbtn').disabled=busy||!sys||!todo.length||space;$('upbtn').textContent=busy?'Uploading…':todo.length?`Upload ${todo.length} file${todo.length==1?'':'s'}`:'Upload'}
+function removeOne(id){queue=queue.filter(q=>q.id!=id);check()}
+function retryOne(id){const q=queue.find(q=>q.id==id);if(q){q.state='ready';q.note='';upload()}}
+function retryFailed(){queue.forEach(q=>{if(q.state=='failed'){q.state='ready';q.note=''}});upload()}
+function clearDone(){queue=queue.filter(q=>q.state!='done'&&q.state!='failed');draw()}
+function put(q){return new Promise((ok,bad)=>{const x=new XMLHttpRequest();x.open('PUT','/api/upload?system='+encodeURIComponent(q.sys.id)+'&name='+encodeURIComponent(q.file.name));
+  x.setRequestHeader('X-SRP','1');let last=0;x.upload.onprogress=e=>{q.pct=Math.round(e.loaded/e.total*100);if(Date.now()-last>250){last=Date.now();draw()}};
+  x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status==200?ok(j):bad(new Error(j.error||'Upload failed'))};x.onerror=()=>bad(new Error('Connection lost'));x.send(q.file)})}
+async function upload(){if(busy)return;const todo=queue.filter(q=>q.state=='ready'||q.state=='failed');if(!todo.length)return;
+  busy=true;$('keep').classList.remove('hide');$('umsg').textContent='';draw();let good=0;
+  for(const q of todo){q.state='uploading';q.pct=0;draw();try{await put(q);q.state='done';q.note='';good++}catch(e){q.state='failed';q.note=e.message}draw()}
+  busy=false;$('keep').classList.add('hide');draw();
+  msg('umsg',good==todo.length?`${good} uploaded - follow them under "Your uploads" until they are ready to play.`:`${good} of ${todo.length} uploaded. Use Retry for the ones that failed - the others won't be sent again.`,good==todo.length);
+  refresh().catch(()=>{})}
+window.addEventListener('beforeunload',e=>{if(busy){e.preventDefault();e.returnValue=''}});
+
+/* ---- TV actions ---- */
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{if(b.getAttribute('aria-pressed')=='true')return;const all=document.querySelectorAll('[data-m]');
+  all.forEach(x=>x.disabled=true);msg('kmsg','Changing mode… the TV menu reloads.',true);
+  try{await api('/api/kidmode',{method:'POST',body:JSON.stringify({mode:b.dataset.m})});all.forEach(x=>x.setAttribute('aria-pressed',x==b));msg('kmsg',b.querySelector('b').textContent+' is on.',true)}
+  catch(e){msg('kmsg',e.message)}finally{setTimeout(()=>{all.forEach(x=>x.disabled=false);refresh().catch(()=>{})},3000)}});
+async function reloadMenu(){const b=$('reloadbtn');b.disabled=true;b.textContent='Reloading menu…';
+  try{msg('rmsg',(await api('/api/reload',{method:'POST'})).message,true)}catch(e){msg('rmsg',e.message)}finally{setTimeout(()=>{b.disabled=false;b.textContent='Reload menu'},5000)}}
+
+document.querySelectorAll('[role=tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(x=>{x.setAttribute('aria-selected',x==b);$(x.getAttribute('aria-controls')).classList.toggle('hide',x!=b)});window.scrollTo(0,0)});
+$('pin').addEventListener('keydown',e=>{if(e.key=='Enter')login()});
+start();
+</script></body></html>
