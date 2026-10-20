@@ -28,7 +28,7 @@ grep -vxF -f /tmp/srp-bezel.txt /tmp/super-retropie-kit/filelist \
  | grep -vE '\.(bak|orig|rp-dist|es-scraper-bak)$|\.bak-|\.before-|\.pre-' \
  | grep -vE 'es_temporaryinput\.cfg|content_.*history\.lpl|search-state\.json|^etc/netplan/|^etc/cloud/' \
  | grep -vE 'emulationstation/gamelists/|^usr/local/bin/Skyscraper$' \
- | grep -vE '\.config/retropie-companion\.json' > /tmp/srp-public.txt          # phone page PIN + secret
+ | grep -vE '\.config/retropie-companion\.json|emulationstation/tmp/' > /tmp/srp-public.txt   # phone PIN; ES temp files
 echo opt/retropie/configs/all/emulationstation/gamelists/retropie/gamelist.xml >> /tmp/srp-public.txt
 # scripts about downloading games or BIOS stay private
 PRIV='torrent|qbittorrent|\.download-incoming|retropie-downloads|retroarch_system|RetroPieBIOS'

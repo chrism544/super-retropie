@@ -1,9 +1,0 @@
-1
-00:00:01,000 --> 00:00:08,000
-Legend of Zelda : Wind Waker, The (USA)
-<i>Nintendo Gamecube</i>
-
-2
-00:00:26,000 --> 00:00:30,000
-Legend of Zelda : Wind Waker, The (USA)
-<i>Nintendo Gamecube</i>
