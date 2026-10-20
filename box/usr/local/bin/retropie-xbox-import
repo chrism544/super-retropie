@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# Xbox game info + covers for Skyscraper's "import" module (ScreenScraper/TheGamesDB couldn't be used
+# on 18 Oct 2026). Covers come from the xemu game database (xdb) by title ID; the cover is also used
+# as the "screenshot" layer so the menu shows it large. Re-run after adding games: unknown title IDs
+# still get their xdb cover and name.
+import json, os, subprocess, sys, urllib.request, xml.sax.saxutils as sx
+sys.path.insert(0, "/usr/local/lib/retropie")
+from xiso_titleid import title_id as tid
+ROMS = '/home/pi/RetroPie/roms/xbox'
+IMP = '/home/pi/.skyscraper/import'
+XDB = 'https://raw.githubusercontent.com/xemu-project/xdb/master/'
+INFO = {
+ 0x4C410014: dict(t='Star Wars: Knights of the Old Republic II - The Sith Lords', dev='Obsidian Entertainment', pub='LucasArts',
+   genre='Role-playing', players='1', rating='0.85', date='20041206',
+   d='Five years after the first game, the Jedi are all but extinct and the Sith are hunting the survivors. You play the Exile, '
+     'a Jedi cut off from the Force, who wakes on a mining station with no memory of how they got there. Guided by the mysterious Kreia, '
+     'you rebuild your connection to the Force and choose, decision by decision, whether to walk the light side or the dark side.'),
+ 0x45530005: dict(t='Deus Ex: Invisible War', dev='Ion Storm', pub='Eidos Interactive', genre='Action RPG / First-person',
+   players='1', rating='0.75', date='20031202',
+   d='Twenty years after the Collapse, a terrorist attack destroys Chicago and your training academy is evacuated to Seattle. '
+     'As Alex D, a biomodified agent, you are courted by rival factions with their own plans for the world. Every mission can be solved '
+     'your way: stealth, hacking, talking or open combat, using upgradable biomods.'),
+ 0x54540003: dict(t='Max Payne', dev='Remedy Entertainment', pub='Rockstar Games', genre='Third-person shooter', players='1',
+   rating='0.85', date='20011211',
+   d='Max Payne is an undercover DEA agent framed for murder, whose wife and baby were killed by junkies high on a new designer drug, Valkyr. '
+     'Over one snowy New York night he fights through the mob to find the truth. Bullet Time slows the action so you can dive '
+     'and aim in slow motion, and the story is told in noir graphic-novel panels.'),
+ 0x45410389: dict(t='Batman Begins', dev='Eurocom', pub='EA Games', genre='Action', players='1', rating='0.65', date='20050614',
+   d='The game of the Christopher Nolan film. Bruce Wayne becomes Batman to take on Ra\'s al Ghul, the Scarecrow and Carmine Falcone, '
+     'mixing stealth, gadgets and fighting. Use fear to break enemies before you strike, and drive the Tumbler through Gotham.'),
+ 0x4541000D: dict(t='007: Agent Under Fire', dev='EA Redwood Shores', pub='Electronic Arts', genre='First-person shooter', players='1-4',
+   rating='0.7', date='',
+   d='James Bond investigates a cloning plot run by the Identicon Corporation and the villain Nigel Bloch. A mix of first-person '
+     'shooting missions and car chases in Bond\'s gadget-filled vehicles, with a split-screen multiplayer mode for up to four players.'),
+ 0x41430016: dict(t='Alias', dev='Acclaim Studios Cheltenham', pub='Acclaim', genre='Stealth action', players='1', rating='0.6', date='',
+   d='Based on the TV series. As CIA double agent Sydney Bristow, voiced by Jennifer Garner, you go undercover across the world to stop '
+     'a plot to steal the secrets of the prophet Rambaldi, using disguises, gadgets, stealth and hand-to-hand combat.'),
+}
+for d in ('covers', 'screenshots', 'textual'):
+    os.makedirs(f'{IMP}/{d}', exist_ok=True)
+defs = f'{IMP}/definitions.dat'
+if not os.path.exists(defs):
+    open(defs, 'w').write(open(f'{IMP}/definitions.dat.example1').read())
+for f in sorted(os.listdir(ROMS)):
+    if not f.lower().endswith('.iso'):
+        continue
+    base = f[:f.rfind('.')]                     # Skyscraper's name for "X.xiso.iso" is "X.xiso"
+    t = tid(f'{ROMS}/{f}')
+    if not t:
+        print('no title id:', f); continue
+    path = f'titles/{chr(t >> 24)}{chr((t >> 16) & 0xff)}/{t & 0xffff:03d}/'
+    cover = f'{IMP}/covers/{base}.jpg'
+    try:
+        if not os.path.exists(cover):
+            urllib.request.urlretrieve(XDB + path + 'cover_front.jpg', cover)
+        subprocess.run(['cp', cover, f'{IMP}/screenshots/{base}.jpg'], check=True)
+    except Exception as e:
+        print('no cover:', f, e)
+    i = INFO.get(t)
+    if not i:
+        try:
+            name = json.load(urllib.request.urlopen(XDB + path + 'info.json'))['name']
+        except Exception:
+            name = base.split(' (')[0]
+        i = dict(t=name, dev='', pub='', genre='', players='', rating='', date='', d='')
+    e = lambda s: sx.escape(s)
+    open(f'{IMP}/textual/{base}.xml', 'w').write(
+        f"<game>\n  <title>{e(i['t'])}</title>\n  <description>{e(i['d'])}</description>\n  <developer>{e(i['dev'])}</developer>\n"
+        f"  <publisher>{e(i['pub'])}</publisher>\n  <players>{i['players']}</players>\n  <rating>{i['rating']}</rating>\n"
+        f"  <ages></ages>\n  <genre>{e(i['genre'])}</genre>\n  <releasedate>{i['date']}</releasedate>\n</game>\n")
+    print(f'{t:08X} {i["t"]}')

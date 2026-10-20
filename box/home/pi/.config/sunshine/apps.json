@@ -1,0 +1,13 @@
+{
+  "env": {},
+  "apps": [
+    {
+      "name": "Super RetroPie",
+      "image-path": "",
+      "output": "",
+      "cmd": [],
+      "exclude-global-prep-cmd": "false",
+      "auto-detach": "true"
+    }
+  ]
+}

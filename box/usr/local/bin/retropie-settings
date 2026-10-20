@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Configuration Editor: common RetroArch settings for all consoles or one
+console, in the EmulationStation theme. "Advanced" exits with code 3 so the wrapper opens
+RetroPie's original configuration editor for everything else.
+
+Writes /opt/retropie/configs/all/retroarch.cfg (All consoles) or
+/opt/retropie/configs/<system>/retroarch.cfg (that console; "Same as all" removes the key).
+"""
+import os, re, sys, time
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+
+CONF = '/opt/retropie/configs'
+SH = CONF + '/all/retroarch/shaders/crt/'
+ROMS = os.path.expanduser('~/RetroPie/roms')
+NAMES = {'all': 'All consoles', 'arcade': 'Arcade', 'snes': 'SNES', 'nes': 'NES', 'megadrive': 'Mega Drive',
+         'mastersystem': 'Master System', 'gamegear': 'Game Gear', 'n64': 'Nintendo 64', 'psx': 'PlayStation',
+         'gb': 'Game Boy', 'gbc': 'Game Boy Color', 'gba': 'Game Boy Advance', 'dreamcast': 'Dreamcast',
+         'gc': 'GameCube', 'nds': 'Nintendo DS', 'psp': 'PSP', 'pcengine': 'PC Engine', 'neogeo': 'Neo Geo',
+         'segacd': 'Mega-CD', 'sega32x': '32X', 'saturn': 'Saturn', 'atari2600': 'Atari 2600', 'mame-libretro': 'MAME'}
+# (label, [(value, label)], description, keys written for each value)
+ON_OFF = [('on', 'On'), ('off', 'Off')]
+OPTIONS = [
+    ('Screen effect', [('none', 'Off'), ('scan', 'CRT scanlines'), ('curve', 'Curved CRT TV')],
+     'Makes old games look like they did on a tube TV. Scanlines are subtle; the curved TV adds curve and glow.',
+     {'none': {'video_shader_enable': 'false'},
+      'scan': {'video_shader_enable': 'true', 'video_shader': SH + 'crt-easymode.glslp'},
+      'curve': {'video_shader_enable': 'true', 'video_shader': SH + 'crt-geom.glslp'}}),
+    ('Smooth picture', ON_OFF, 'Softens the picture. Off keeps crisp, blocky pixels.',
+     {'on': {'video_smooth': 'true'}, 'off': {'video_smooth': 'false'}}),
+    ('Pixel-perfect size', ON_OFF, 'Scales by whole steps so every pixel is the same size. The picture gets a little smaller, with a border.',
+     {'on': {'video_scale_integer': 'true'}, 'off': {'video_scale_integer': 'false'}}),
+    ('Resume where you left off', ON_OFF, 'Saves your exact place when you quit a game and puts you back there next time.',
+     {'on': {'savestate_auto_save': 'true', 'savestate_auto_load': 'true'},
+      'off': {'savestate_auto_save': 'false', 'savestate_auto_load': 'false'}}),
+    ('Reduce input lag', ON_OFF, 'Run-ahead: buttons respond a frame sooner. Uses more power - best for 8 and 16-bit consoles and arcade.',
+     {'on': {'run_ahead_enabled': 'true', 'run_ahead_frames': '1', 'run_ahead_secondary_instance': 'false'},
+      'off': {'run_ahead_enabled': 'false'}}),
+    ('Show frame rate', ON_OFF, 'Shows frames per second in the corner while you play.',
+     {'on': {'fps_show': 'true'}, 'off': {'fps_show': 'false'}}),
+    # 5th field 'core': a core option (retroarch-core-options.cfg), the same for every console view
+    ('PlayStation start-up', ON_OFF, 'PlayStation games start with the Sony and PlayStation logos and the start-up chime, '
+     'like the real console. Off starts the game straight away, without the start-up sound.',
+     {'on': {'pcsx_rearmed_show_bios_bootlogo': 'enabled'}, 'off': {'pcsx_rearmed_show_bios_bootlogo': 'disabled'}}, 'core'),
+]
+CORE = CONF + '/all/retroarch-core-options.cfg'
+
+def cfg_path(scope): return f'{CONF}/{scope}/retroarch.cfg'
+
+def read(path):
+    vals = {}
+    try:
+        for line in open(path):
+            m = re.match(r'\s*([a-z0-9_]+)\s*=\s*"?([^"\n]*)"?', line)
+            if m: vals[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    return vals
+
+def write(path, updates, remove=()):
+    lines = open(path).read().splitlines() if os.path.exists(path) else []
+    done = set()
+    out = []
+    for line in lines:
+        m = re.match(r'\s*([a-z0-9_]+)\s*=', line)
+        if m and m.group(1) in remove:
+            continue
+        if m and m.group(1) in updates:
+            out.append(f'{m.group(1)} = "{updates[m.group(1)]}"'); done.add(m.group(1)); continue
+        out.append(line)
+    out += [f'{k} = "{v}"' for k, v in updates.items() if k not in done]
+    open(path, 'w').write('\n'.join(out) + '\n')
+
+def current(opt, vals):
+    """Which choice the config values match (None = not set)."""
+    for value, keys in opt[3].items():
+        if all(vals.get(k) == v for k, v in keys.items()):
+            return value
+    if opt[0] == 'Screen effect' and vals.get('video_shader_enable') == 'true' and vals.get('video_shader'):
+        return 'other'                               # a shader set some other way
+    return opt[1][-1][0] if opt[1][-1][0] == 'off' else opt[1][0][0]   # unset = RetroArch default (off)
+
+def scopes():
+    out = ['all']
+    for s in sorted(os.listdir(CONF)):
+        if s in ('all', 'ports') or not os.path.exists(cfg_path(s)):
+            continue
+        emu = f'{CONF}/{s}/emulators.cfg'
+        if not os.path.exists(emu) or 'retroarch' not in open(emu).read():
+            continue
+        d = os.path.join(ROMS, s)
+        if os.path.isdir(d) and any(not f.endswith(('.xml', '.txt')) and not f.startswith('.') for f in os.listdir(d)):
+            out.append(s)
+    return out
+
+# ------------------------------------------------------------------ UI
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32)
+pygame.init()
+shot = os.environ.get('SETTINGS_SHOT')
+screen = pygame.display.set_mode((1920, 1080)) if shot else pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size(); S = H / 1080
+px = lambda v: int(v * S)
+fonts = {}
+def font(n):
+    if n not in fonts:
+        fonts[n] = pygame.font.Font(FONT, px(n)) if os.path.exists(FONT) else pygame.font.SysFont('dejavusans', px(n))
+    return fonts[n]
+def text(t, n, c, pos, anchor='topleft'):
+    s = font(n).render(t, True, c); r = s.get_rect(**{anchor: pos}); screen.blit(s, r); return r
+def pill(r, c=ACCENT, rad=None):
+    rad = r.h // 2 if rad is None else rad
+    pygame.draw.rect(screen, c, r, border_radius=rad)
+    g = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(g, (255, 255, 255, 45), (0, 0, r.w, r.h // 2), border_radius=rad); screen.blit(g, r.topleft)
+def wrap(t, n, w):
+    out, cur = [], ''
+    for word in t.split():
+        x = (cur + ' ' + word).strip()
+        if font(n).size(x)[0] <= w: cur = x
+        else: out.append(cur); cur = word
+    return out + [cur]
+try:
+    BG = pygame.transform.smoothscale(pygame.image.load(THEME + '/_inc/ingame-global-bg.png').convert(), (W, H))
+except Exception:
+    BG = None
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+SC = scopes()
+si, sel, msg = 0, 0, ''
+ROWS = len(OPTIONS) + 1                         # + Advanced
+ignore = time.time() + 0.6
+held, rep = None, 0
+clock = pygame.time.Clock()
+
+def change(step):
+    global msg
+    opt = OPTIONS[sel]; scope = SC[si]
+    if len(opt) > 4:                                  # core option: one file for every console
+        v = current(opt, read(CORE)); vals_choices = [c for c, _ in opt[1]]
+        new = vals_choices[(vals_choices.index(v) + step) % len(vals_choices)]
+        write(CORE, opt[3][new]); msg = 'Saved - applies from the next game you start'; return
+    choices = [v for v, _ in opt[1]] + ([] if scope == 'all' else ['inherit'])
+    vals = read(cfg_path(scope))
+    now = current(opt, vals) if (scope == 'all' or any(k in vals for k in set().union(*[set(k) for k in opt[3].values()]))) else 'inherit'
+    now = now if now in choices else choices[0]
+    new = choices[(choices.index(now) + step) % len(choices)]
+    allkeys = set().union(*[set(k) for k in opt[3].values()])
+    if new == 'inherit':
+        write(cfg_path(scope), {}, remove=allkeys)
+    else:
+        write(cfg_path(scope), opt[3][new], remove=allkeys - set(opt[3][new]))
+    msg = 'Saved - applies from the next game you start'
+
+while True:
+    acts = []
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT: sys.exit(0)
+        if time.time() < ignore: continue
+        if e.type == pygame.JOYBUTTONDOWN:
+            acts.append({0: 'a', 1: 'b', 4: 'lb', 5: 'rb'}.get(e.button))
+        elif e.type == pygame.JOYHATMOTION:
+            d = {(0, 1): 'up', (0, -1): 'down', (-1, 0): 'left', (1, 0): 'right'}.get(e.value); held, rep = d, time.time() + 0.45
+            if d: acts.append(d)
+        elif e.type == pygame.JOYAXISMOTION and e.axis in (0, 1):
+            v = e.value
+            d = (('left' if v < -0.6 else 'right' if v > 0.6 else None) if e.axis == 0 else ('up' if v < -0.6 else 'down' if v > 0.6 else None))
+            if d != held and (d or held in (('left', 'right') if e.axis == 0 else ('up', 'down'))):
+                held, rep = d, time.time() + 0.45
+                if d: acts.append(d)
+        elif e.type == pygame.KEYDOWN and not pads:      # RetroPie menu runs joy2key: pad also arrives as keys
+            acts.append({pygame.K_UP: 'up', pygame.K_DOWN: 'down', pygame.K_LEFT: 'left', pygame.K_RIGHT: 'right',
+                         pygame.K_RETURN: 'a', pygame.K_ESCAPE: 'b'}.get(e.key))
+    if held and time.time() > rep:
+        acts.append(held); rep = time.time() + 0.15
+    for a in acts:
+        if a == 'up': sel = (sel - 1) % ROWS
+        elif a == 'down': sel = (sel + 1) % ROWS
+        elif a == 'lb': si = (si - 1) % len(SC); msg = ''
+        elif a == 'rb': si = (si + 1) % len(SC); msg = ''
+        elif a == 'b': sys.exit(0)
+        elif sel == len(OPTIONS):
+            if a == 'a': sys.exit(3)                 # wrapper opens RetroPie's own editor
+        elif a in ('a', 'right'): change(1)
+        elif a == 'left': change(-1)
+
+    screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
+    text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
+    text('Game Settings', 56, TEXT, (px(80), px(95)))
+    # console selector
+    r = pygame.Rect(px(80), px(185), px(760), px(64)); pill(r)
+    text('LB', 22, DIM, (r.x + px(30), r.centery), 'midleft'); text('RB', 22, DIM, (r.right - px(30), r.centery), 'midright')
+    text(NAMES.get(SC[si], SC[si]), 32, TEXT, r.center, 'center')
+    scope = SC[si]; vals = read(cfg_path(scope)); allv = read(cfg_path('all'))
+    y = px(285)
+    for i, opt in enumerate(OPTIONS):
+        allkeys = set().union(*[set(k) for k in opt[3].values()])
+        if len(opt) > 4:
+            v = current(opt, read(CORE)); shown = dict(opt[1]).get(v, 'Other')
+        elif scope != 'all' and not any(k in vals for k in allkeys):
+            v = current(opt, allv); shown = f"Same as all ({dict(opt[1]).get(v, 'Other')})"
+        else:
+            v = current(opt, vals if scope != 'all' else allv); shown = dict(opt[1]).get(v, 'Other')
+        row = pygame.Rect(px(80), y, px(760), px(68))
+        if i == sel: pill(row, rad=px(14))
+        else: pygame.draw.rect(screen, PANEL, row, border_radius=px(14))
+        text(opt[0], 30, TEXT, (row.x + px(28), row.centery), 'midleft')
+        text(('‹  ' if i == sel else '') + shown + ('  ›' if i == sel else ''), 28, TEXT if i == sel else ACCENT_LT, (row.right - px(28), row.centery), 'midright')
+        y += px(80)
+    row = pygame.Rect(px(80), y + px(20), px(760), px(68))
+    if sel == len(OPTIONS): pill(row, rad=px(14))
+    else: pygame.draw.rect(screen, PANEL, row, border_radius=px(14))
+    text('Advanced: logs, network, performance, setup', 30, TEXT, (row.x + px(28), row.centery), 'midleft')
+    # description
+    dx = px(920)
+    if sel < len(OPTIONS):
+        title, desc = OPTIONS[sel][0], OPTIONS[sel][2]
+        if scope != 'all':
+            desc += ' "Same as all" uses the All consoles setting.'
+    else:
+        title, desc = 'Advanced', "Game launch logs, Network, Performance, RetroPie Netplay, RetroPie Setup and every RetroArch setting."
+    text(title, 40, ACCENT_LT, (dx, px(285)))
+    yy = px(345)
+    for line in wrap(desc, 30, W - dx - px(80)):
+        text(line, 30, (215, 225, 235), (dx, yy)); yy += px(44)
+    if msg:
+        text(msg, 28, ACCENT_LT, (dx, yy + px(30)))
+    x = px(80)
+    for b, l in (('A', 'Change'), ('LB/RB', 'Console'), ('B', 'Back')):
+        r = pygame.Rect(x, H - px(75), max(px(46), font(22).size(b)[0] + px(24)), px(46)); pill(r)
+        text(b, 22, TEXT, r.center, 'center')
+        x = text(l, 26, DIM, (r.right + px(12), r.centery), 'midleft').right + px(40)
+    pygame.display.flip()
+    if shot:
+        pygame.image.save(screen, shot); sys.exit(0)
+    clock.tick(60)

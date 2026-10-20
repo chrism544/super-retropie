@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""RetroPie menu "Performance": processor power mode and Xbox emulator updates.
+
+Power mode sets the long-term CPU power limit (via retropie-power-set, remembered across restarts).
+Tested on this box: 35 W -> 50 W gives ~24% higher all-core clock at 75 C; above ~45 W it gains nothing.
+"""
+import glob, os, subprocess, sys, time
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+
+PL1 = '/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw'
+XEMU = '/opt/retropie/emulators/xemu-appimage'
+MODES = [(25, 'Cool & quiet (25 W)'), (35, 'Standard (35 W)'), (50, 'Performance (50 W)')]
+MODE_DESC = {25: 'Lowest heat and fan noise. Fine for older consoles; PS2, GameCube, Wii and Xbox will run slower.',
+             35: 'What the PC came set to.',
+             50: 'Faster for demanding games (Xbox, PS2, Wii). The fan runs harder; tested safe at 75 C.'}
+
+def read(p, default=''):
+    try: return open(p).read().strip()
+    except OSError: return default
+
+def sensor(name, f):
+    for h in glob.glob('/sys/class/hwmon/hwmon*'):
+        if read(f'{h}/name') == name: return read(f'{h}/{f}')
+    return ''
+
+def status():
+    t = next((read(z + '/temp') for z in glob.glob('/sys/class/thermal/thermal_zone*') if read(z + '/type') == 'x86_pkg_temp'), '')
+    fan = sensor('dell_smm', 'fan1_input')
+    mhz = [float(l.split(':')[1]) for l in open('/proc/cpuinfo') if l.startswith('cpu MHz')]
+    bits = []
+    if t: bits.append(f'{int(t) // 1000} C')
+    if fan: bits.append(f'fan {fan} rpm')
+    if mhz: bits.append(f'{sum(mhz) / len(mhz) / 1000:.1f} GHz average')
+    return 'Right now: ' + ', '.join(bits)
+
+def xemu_info():
+    ver = read(f'{XEMU}/VERSION', 'unknown')
+    last = [l for l in read('/var/log/retropie-update-xemu.log').splitlines() if l]
+    when = f' Last check: {last[-1][:16]}.' if last else ''
+    return f'Installed: xemu {ver}.{when} Checks every night at about 4:30 and installs new versions when nothing is playing.'
+
+watts = round(int(read(PL1, '35000000')) / 1e6)
+timer_on = subprocess.run(['systemctl', 'is-enabled', 'retropie-update-xemu.timer'], capture_output=True, text=True).stdout.strip() == 'enabled'
+rows = [{'label': 'Power mode', 'choices': MODES, 'value': watts},
+        {'label': 'Xbox emulator updates', 'choices': [(True, 'Automatic'), (False, 'Off')], 'value': timer_on}]
+
+def on_change(i, v):
+    if i == 0:
+        r = subprocess.run(['sudo', '-n', '/usr/local/bin/retropie-power-set', str(v)], capture_output=True, text=True)
+        return 'Saved - stays set after a restart.' if r.returncode == 0 else 'Could not change it: ' + (r.stderr.strip() or 'error')
+    r = subprocess.run(['sudo', '-n', 'systemctl', 'enable' if v else 'disable', '--now', 'retropie-update-xemu.timer'],
+                       capture_output=True, text=True)
+    return ('Updates on.' if v else 'Updates off - xemu stays on this version.') if r.returncode == 0 else 'Could not change it.'
+
+last = [0]
+def live(sel, value):
+    # refresh the live readings once a second (the screen redraws 60 times a second)
+    if time.time() - last[0] >= 1:
+        last[0] = time.time()
+        rows[0]['desc'] = MODE_DESC.get(rows[0]['value'], '') + '  ' + status()
+        rows[1]['desc'] = xemu_info()
+    return None
+
+ui.options_screen('PERFORMANCE', 'Performance', rows, on_change=on_change, preview=live,
+                  sub='Processor power and emulator updates')

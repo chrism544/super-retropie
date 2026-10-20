@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+sys.path.insert(0,'/usr/local/lib/retropie')
+from retropie_boot_sound import main
+main()

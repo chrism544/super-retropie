@@ -1,0 +1,14 @@
+[Unit]
+Description=Controller battery level on the EmulationStation menu
+After=graphical.target bluetooth.service
+
+[Service]
+User=pi
+Environment=DISPLAY=:0 XAUTHORITY=/home/pi/.Xauthority
+ExecStart=/usr/bin/python3 /usr/local/bin/retropie-battery
+Restart=always
+RestartSec=15
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

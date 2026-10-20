@@ -1,0 +1,7 @@
+[Unit]
+Description=Monthly Super RetroPie safe update (first Sunday, early morning)
+[Timer]
+OnCalendar=Sun *-*-01..07 04:30
+Persistent=false
+[Install]
+WantedBy=timers.target

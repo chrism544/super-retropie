@@ -1,0 +1,13 @@
+#!/bin/bash
+# Before EmulationStation starts: put the screen in its normal mode and wait (up to 10 s) until the
+# X screen really is that size. ES reads the screen size once at start-up - started while a game
+# (xemu) was still giving the screen back, it drew the whole menu in the left 3/4 (Oct 2026).
+export DISPLAY=${DISPLAY:-:0} XAUTHORITY=${XAUTHORITY:-/home/pi/.Xauthority}
+/usr/local/bin/retropie-display-mode
+want=$(xrandr --current 2>/dev/null | awk "/ connected/ && match(\$0, /[0-9]+x[0-9]+\+/) {print substr(\$0, RSTART, RLENGTH-1); exit}")
+[ -n "$want" ] || exit 0
+for i in $(seq 1 20); do
+    have=$(xdpyinfo 2>/dev/null | awk "/dimensions:/{print \$2}")
+    [ "$have" = "$want" ] && { sleep 0.5; exit 0; }
+    sleep 0.5
+done

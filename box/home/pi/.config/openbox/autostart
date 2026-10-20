@@ -1,0 +1,18 @@
+# EmulationStation runs inside a fullscreen xterm so runcommand / RetroPie menus
+xrdb -merge $HOME/.Xresources   # theme colours for xterm / text menus
+# have a real foreground terminal (otherwise they get SIGTTIN-stopped -> black screen).
+# Quit ES twice within 5s to drop to Openbox.
+python3 /usr/local/bin/retropie-music daemon &   # Super RetroPie menu music
+# game loading screens: started once so a game's screen shows the instant it is picked (EmulationStation
+# game-start script); restarted if it ever stops
+(while true; do python3 /usr/local/bin/retropie-launchscreen --daemon >/dev/null 2>&1; sleep 2; done) &
+sunshine &   # game streaming to other screens (Moonlight)
+while true; do
+    # retropie-scrape holds ES while it rebuilds the game lists
+    while [ -e /tmp/es-hold ]; do sleep 1; done
+    python3 /usr/local/bin/retropie-loading &   # Super RetroPie loading screen until ES has loaded
+    start=$(date +%s)
+    xterm -fullscreen -bg black -fg white -fa 'DejaVu Sans Mono' -fs 16 \
+        -e /usr/bin/emulationstation --no-splash
+    [ $(( $(date +%s) - start )) -lt 5 ] && break
+done &

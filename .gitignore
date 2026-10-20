@@ -1,0 +1,7 @@
+# Box snapshot: built by tools/build-super-retropie-kit.sh, may hold network/Samba/Sunshine config
+usb/nocloud/retropie/super-retropie/files.tar.gz
+usb/nocloud/retropie/super-retropie/files-list.txt
+# Never commit these
+*.iso
+*.pub
+id_*

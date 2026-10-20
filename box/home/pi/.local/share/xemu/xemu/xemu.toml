@@ -1,0 +1,31 @@
+[general]
+show_welcome = false
+skip_boot_anim = true
+
+[general.updates]
+check = false
+
+[input]
+gamepad_mappings = [
+    { gamepad_id = '050018dc5e0400008e02000030110000'}
+    ]
+
+[input.bindings]
+port1_driver = 'usb-xbox-gamepad'
+port1 = '050018dc5e0400008e02000030110000'
+
+[display.vulkan]
+preferred_physical_device = 'Intel(R) UHD Graphics 770 (ADL-S GT1)'
+
+[display.window]
+fullscreen_on_startup = true
+
+[display.ui]
+show_menubar = false
+
+[sys.files]
+bootrom_path = '/home/pi/RetroPie/BIOS/xbox/mcpx_1.0.bin'
+flashrom_path = '/home/pi/RetroPie/BIOS/xbox/Complex_4627.bin'
+eeprom_path = '/home/pi/RetroPie/BIOS/xbox/eeprom.bin'
+hdd_path = '/home/pi/RetroPie/BIOS/xbox/xbox_hdd.qcow2'
+

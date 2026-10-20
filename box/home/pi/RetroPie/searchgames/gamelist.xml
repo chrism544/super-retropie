@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./Search Games.sh</path>
+		<name>Search Games</name>
+		<desc>Pick a console (or All Systems), then spell the name one letter at a time. Matches appear as you type and allow for typos, initials (SMW) and numbers (2 = II). A plays the game, X deletes a letter, Y adds a space, RB jumps to the results, B goes back.</desc>
+		<image>/etc/emulationstation/themes/bluray/searchgames/_inc/system.png</image>
+		<playcount>2</playcount>
+		<lastplayed>20261016T215010</lastplayed>
+	</game>
+</gameList>

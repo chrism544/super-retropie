@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Super RetroPie
+Description=Super RetroPie boot screen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/super-retropie
+ScriptFile=/usr/share/plymouth/themes/super-retropie/super-retropie.script

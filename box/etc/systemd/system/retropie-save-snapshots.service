@@ -1,0 +1,7 @@
+[Unit]
+Description=Snapshot changed game saves (Save Manager)
+[Service]
+Type=oneshot
+User=pi
+Environment=HOME=/home/pi
+ExecStart=/usr/local/bin/retropie-saves snapshot-all

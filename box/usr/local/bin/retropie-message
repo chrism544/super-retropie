@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Full-screen message in the EmulationStation bluray theme style.
+
+  retropie-message "Title" "Message text (\\n for new lines)" [seconds] [image]
+
+Closes after <seconds> (default 12) or when any controller button / key is pressed.
+"""
+import os, sys, time
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+BG = THEME + '/_inc/ingame-global-bg.png'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32)
+
+title = sys.argv[1] if len(sys.argv) > 1 else 'Message'
+body = (sys.argv[2] if len(sys.argv) > 2 else '').replace('\\n', '\n')
+secs = float(sys.argv[3]) if len(sys.argv) > 3 else 12
+art = sys.argv[4] if len(sys.argv) > 4 else ''
+
+pygame.init()
+screen = pygame.display.set_mode((1920, 1080) if os.environ.get('MSG_SHOT') else (0, 0),
+                                 0 if os.environ.get('MSG_SHOT') else pygame.FULLSCREEN)
+pygame.mouse.set_visible(False)
+W, H = screen.get_size()
+S = H / 1080
+def px(v): return int(v * S)
+def font(size):
+    try:
+        return pygame.font.Font(FONT, px(size))
+    except OSError:
+        return pygame.font.SysFont('dejavusans', px(size))
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+def wrap(text, f, maxw):
+    lines = []
+    for para in text.split('\n'):
+        cur = ''
+        for w in para.split(' '):
+            t = (cur + ' ' + w) if cur else w
+            if f.size(t)[0] <= maxw:
+                cur = t
+            else:
+                lines.append(cur); cur = w
+        lines.append(cur)
+    return lines
+
+try:
+    bg = pygame.transform.smoothscale(pygame.image.load(BG).convert(), (W, H))
+except Exception:
+    bg = None
+img = None
+if art and os.path.exists(art):
+    try:
+        i = pygame.image.load(art).convert_alpha()
+        k = min(px(300) / i.get_width(), px(380) / i.get_height())
+        img = pygame.transform.smoothscale(i, (int(i.get_width() * k), int(i.get_height() * k)))
+    except Exception:
+        img = None
+
+def pill(rect, color=ACCENT):
+    pygame.draw.rect(screen, color, rect, border_radius=rect.h // 2)
+    gloss = pygame.Surface(rect.size, pygame.SRCALPHA)
+    pygame.draw.rect(gloss, (255, 255, 255, 45), (0, 0, rect.w, rect.h // 2), border_radius=rect.h // 2)
+    screen.blit(gloss, rect.topleft)
+
+start, ignore = time.time(), time.time() + 0.8      # ignore the button that started the game
+clock = pygame.time.Clock()
+while True:
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            sys.exit(0)
+        if e.type in (pygame.JOYBUTTONDOWN, pygame.KEYDOWN) and time.time() > ignore:
+            sys.exit(0)
+    left = secs - (time.time() - start)
+    if left <= 0:
+        sys.exit(0)
+    if bg: screen.blit(bg, (0, 0))
+    else: screen.fill((0, 0, 0))
+    # panel
+    pw, ph = px(1300), px(620)
+    panel = pygame.Rect((W - pw) // 2, (H - ph) // 2 - px(20), pw, ph)
+    pygame.draw.rect(screen, PANEL, panel, border_radius=px(22))
+    pygame.draw.rect(screen, ACCENT, panel, width=px(3), border_radius=px(22))
+    head = pygame.Rect(panel.x, panel.y, pw, px(96))
+    pygame.draw.rect(screen, ACCENT, head, border_top_left_radius=px(22), border_top_right_radius=px(22))
+    gloss = pygame.Surface(head.size, pygame.SRCALPHA)
+    pygame.draw.rect(gloss, (255, 255, 255, 40), (0, 0, head.w, head.h // 2), border_top_left_radius=px(22), border_top_right_radius=px(22))
+    screen.blit(gloss, head.topleft)
+    t = font(46).render(title, True, TEXT)
+    screen.blit(t, t.get_rect(midleft=(head.x + px(40), head.centery)))
+    tx = panel.x + px(45)
+    if img:
+        screen.blit(img, (panel.x + px(40), head.bottom + px(40)))
+        tx = panel.x + px(40) + img.get_width() + px(45)
+    y = head.bottom + px(40)
+    f = font(32)
+    for i, line in enumerate(wrap(body, f, panel.right - px(45) - tx)):
+        col = TEXT if i == 0 else (215, 225, 235)
+        if line.strip().startswith('\\\\'):
+            col = ACCENT_LT
+        s = f.render(line, True, col)
+        screen.blit(s, (tx, y)); y += px(46)
+    # footer
+    r = pygame.Rect(0, 0, px(470), px(58)); r.midbottom = (W // 2, panel.bottom - px(30))
+    pill(r)
+    s = font(26).render(f'Press any button   ·   closing in {int(left) + 1}s', True, TEXT)
+    screen.blit(s, s.get_rect(center=r.center))
+    pygame.display.flip()
+    if os.environ.get('MSG_SHOT'):                  # testing: save one frame and stop
+        pygame.image.save(screen, os.environ['MSG_SHOT']); sys.exit(0)
+    clock.tick(30)

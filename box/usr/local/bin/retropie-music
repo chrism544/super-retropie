@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Super RetroPie menu music.
+
+  retropie-music daemon        play ~/RetroPie/music (shuffled, looping) while in the menus
+  retropie-music pause|resume  called by runcommand-onstart / -onend around every game
+  retropie-music               settings screen (on/off, volume, now playing, skip)
+
+Settings: ~/.config/retropie-music.json  {"on": true, "volume": 35}
+"""
+import glob, json, os, random, socket, subprocess, sys, time
+
+MUSIC = os.path.expanduser('~/RetroPie/music')
+CFG = os.path.expanduser('~/.config/retropie-music.json')
+SOCK = '/tmp/retropie-music.sock'
+EXT = ('.mp3', '.ogg', '.wav', '.flac', '.m4a', '.opus')
+
+def load():
+    try: return {'on': True, 'volume': 35, **json.load(open(CFG))}
+    except Exception: return {'on': True, 'volume': 35}
+def save(c): os.makedirs(os.path.dirname(CFG), exist_ok=True); json.dump(c, open(CFG, 'w'))
+
+def ipc(*cmd):
+    try:
+        s = socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect(SOCK)
+        s.sendall((json.dumps({'command': list(cmd)}) + '\n').encode())
+        data = s.recv(65536).decode(); s.close()
+        for line in data.splitlines():
+            r = json.loads(line)
+            if 'error' in r: return r.get('data')
+    except Exception:
+        return None
+
+def tracks():
+    return sorted(f for f in glob.glob(MUSIC + '/**/*', recursive=True) if f.lower().endswith(EXT))
+
+if len(sys.argv) > 1 and sys.argv[1] == 'daemon':
+    while True:
+        c = load(); ts = tracks()
+        if not c['on'] or not ts:
+            time.sleep(5); continue
+        random.shuffle(ts)
+        pl = '/tmp/retropie-music.m3u'; open(pl, 'w').write('\n'.join(ts) + '\n')
+        p = subprocess.Popen(['mpv', '--no-video', '--really-quiet', f'--volume={c["volume"]}', '--loop-playlist=inf',
+                              f'--input-ipc-server={SOCK}', f'--playlist={pl}'] +
+                             (['--pause'] if os.path.exists('/tmp/retropie-music-paused') else []))
+        while p.poll() is None:
+            time.sleep(3)
+            n = load()
+            if not n['on'] or tracks() != sorted(ts):          # switched off, or music added/removed
+                p.terminate(); p.wait(); break
+            if n['volume'] != c['volume']:
+                ipc('set_property', 'volume', n['volume']); c = n
+    sys.exit(0)
+if len(sys.argv) > 1 and sys.argv[1] in ('pause', 'resume'):
+    if sys.argv[1] == 'pause': open('/tmp/retropie-music-paused', 'w').close()
+    else:
+        try: os.remove('/tmp/retropie-music-paused')
+        except OSError: pass
+    ipc('set_property', 'pause', sys.argv[1] == 'pause'); sys.exit(0)
+
+# ------------------------------------------------------------------ settings screen
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+c = load()
+now = lambda: os.path.splitext(os.path.basename(ipc('get_property', 'path') or ''))[0] or ('(nothing playing)' if c['on'] else '(off)')
+def skip():
+    ipc('playlist-next', 'force'); time.sleep(0.4); return f'Now playing: {now()}'
+rows = [
+    {'label': 'Menu music', 'value': 'on' if c['on'] else 'off', 'choices': [('on', 'On'), ('off', 'Off')],
+     'desc': 'Plays music quietly while you are in the menus. It pauses automatically while you play a game.'},
+    {'label': 'Volume', 'value': str(c['volume']), 'choices': [(str(v), f'{v} %') for v in (10, 20, 35, 50, 70, 100)],
+     'desc': 'Music volume, compared with the games.'},
+    {'label': 'Next track', 'action': skip, 'desc': f'Now playing: {now()}', 'gap': True},
+    {'label': 'Your own music', 'action': lambda: None,
+     'desc': f'{len(tracks())} tracks. Add your own MP3s to  \\\\super-retropie\\music  - they join the playlist automatically. '
+             'The three Super RetroPie tracks are original chiptunes made for this box.'},
+]
+def on_change(i, v):
+    if i == 0: c['on'] = v == 'on'
+    if i == 1: c['volume'] = int(v)
+    save(c); return 'Saved'
+ui.options_screen('SETTINGS', 'Menu Music', rows, on_change)

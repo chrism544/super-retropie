@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Bluetooth, in the EmulationStation theme.
+Paired devices with connection and battery; connect / disconnect, remove, pair new devices.
+Won't disconnect or remove the last connected controller (you'd lose control of the menu)."""
+import os, re, subprocess, sys, threading, time
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+
+def bt(*args, timeout=10):
+    try:
+        return subprocess.run(['bluetoothctl', *args], capture_output=True, text=True, timeout=timeout).stdout
+    except subprocess.TimeoutExpired as e:
+        return (e.stdout or b'').decode() if isinstance(e.stdout, bytes) else (e.stdout or '')
+
+def devices(which='Paired'):
+    out = []
+    for line in bt('devices', which).splitlines():
+        m = re.match(r'Device (\S+) (.*)', line)
+        if not m:
+            continue
+        mac, name = m.group(1), m.group(2).strip()
+        info = bt('info', mac)
+        icon = (re.search(r'Icon: (\S+)', info) or [None, ''])[1]
+        kind = 'Controller' if 'gaming' in icon or 'input' in icon else 'Audio' if 'audio' in icon or 'headset' in icon else 'Device'
+        batt = re.search(r'Battery Percentage: \S+ \((\d+)\)', info)
+        out.append({'mac': mac, 'name': name, 'kind': kind, 'connected': 'Connected: yes' in info,
+                    'battery': int(batt.group(1)) if batt else None})
+    return out
+
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL, GOOD, BAD = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32), (90, 200, 120), (230, 110, 110)
+pygame.init()
+shot = os.environ.get('BT_SHOT')
+screen = pygame.display.set_mode((1920, 1080)) if shot else pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size(); S = H / 1080
+px = lambda v: int(v * S)
+fonts = {}
+def font(n):
+    if n not in fonts:
+        fonts[n] = pygame.font.Font(FONT, px(n)) if os.path.exists(FONT) else pygame.font.SysFont('dejavusans', px(n))
+    return fonts[n]
+def text(t, n, c, pos, anchor='topleft'):
+    s = font(n).render(t, True, c); r = s.get_rect(**{anchor: pos}); screen.blit(s, r); return r
+def pill(r, c=ACCENT, rad=None):
+    rad = r.h // 2 if rad is None else rad
+    pygame.draw.rect(screen, c, r, border_radius=rad)
+    g = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(g, (255, 255, 255, 45), (0, 0, r.w, r.h // 2), border_radius=rad); screen.blit(g, r.topleft)
+try:
+    BG = pygame.transform.smoothscale(pygame.image.load(THEME + '/_inc/ingame-global-bg.png').convert(), (W, H))
+except Exception:
+    BG = None
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+state = {'paired': devices(), 'found': [], 'busy': '', 'msg': '', 'mode': 'paired', 'confirm': None}
+sel = 0
+
+def run_bg(label, fn):
+    def job():
+        state['busy'] = label
+        try:
+            state['msg'] = fn() or ''
+        except Exception as e:
+            state['msg'] = f'Failed: {e}'
+        state['paired'] = devices()
+        state['busy'] = ''
+    threading.Thread(target=job, daemon=True).start()
+
+def last_controller(d):
+    return d['kind'] == 'Controller' and d['connected'] and \
+        sum(1 for x in state['paired'] if x['kind'] == 'Controller' and x['connected']) <= 1
+
+def toggle(d):
+    if d['connected']:
+        if last_controller(d):
+            state['msg'] = "That's the controller you're using - it stays connected"; return
+        run_bg(f"Disconnecting {d['name']}", lambda: 'Disconnected' if 'Successful' in bt('disconnect', d['mac']) else 'Could not disconnect')
+    else:
+        run_bg(f"Connecting {d['name']}", lambda: 'Connected' if 'successful' in bt('connect', d['mac'], timeout=20).lower()
+               else 'Could not connect - is it switched on and nearby?')
+
+def remove(d):
+    if last_controller(d):
+        state['msg'] = "That's the controller you're using - it can't be removed from here"; return
+    run_bg(f"Removing {d['name']}", lambda: 'Removed' if 'removed' in bt('remove', d['mac']).lower() else 'Could not remove')
+
+def scan():
+    def job():
+        state['busy'] = 'Searching for devices (20 seconds)'
+        state['found'] = []
+        p = subprocess.Popen(['bluetoothctl', '--timeout', '20', 'scan', 'on'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        known = {d['mac'] for d in state['paired']}
+        for _ in range(20):
+            time.sleep(1)
+            state['found'] = [d for d in devices('') if d['mac'] not in known and not re.fullmatch(r'([0-9A-F]{2}-){5}[0-9A-F]{2}', d['name'])]
+        p.wait()
+        state['busy'] = ''
+        state['msg'] = f"{len(state['found'])} found - choose one to pair" if state['found'] else 'Nothing found - put the device in pairing mode and try again'
+    threading.Thread(target=job, daemon=True).start()
+
+def pair(d):
+    def go():
+        agent = subprocess.Popen(['bt-agent', '-c', 'NoInputNoOutput'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(1)
+            out = bt('pair', d['mac'], timeout=30)
+            if 'successful' not in out.lower() and 'AlreadyExists' not in out:
+                return 'Pairing failed - keep the device in pairing mode and try again'
+            bt('trust', d['mac'])
+            bt('connect', d['mac'], timeout=20)
+            state['mode'] = 'paired'
+            return f"{d['name']} paired and connected"
+        finally:
+            agent.terminate()
+    run_bg(f"Pairing {d['name']}", go)
+
+ignore = time.time() + 0.6
+held, rep = None, 0
+clock = pygame.time.Clock()
+last_refresh = time.time()
+while True:
+    acts = []
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT: sys.exit(0)
+        if time.time() < ignore: continue
+        if e.type == pygame.JOYBUTTONDOWN:
+            acts.append({0: 'a', 1: 'b', 2: 'x', 3: 'y'}.get(e.button))
+        elif e.type == pygame.JOYHATMOTION:
+            d = {(0, 1): 'up', (0, -1): 'down'}.get(e.value); held, rep = d, time.time() + 0.45
+            if d: acts.append(d)
+        elif e.type == pygame.KEYDOWN and not pads:      # RetroPie menu runs joy2key: pad also arrives as keys
+            acts.append({pygame.K_UP: 'up', pygame.K_DOWN: 'down', pygame.K_RETURN: 'a', pygame.K_ESCAPE: 'b'}.get(e.key))
+        elif e.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
+            pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+    if held and time.time() > rep:
+        acts.append(held); rep = time.time() + 0.15
+    lst = state['paired'] if state['mode'] == 'paired' else state['found']
+    for a in acts:
+        if state['busy'] and a != 'b':
+            continue
+        if a == 'up': sel = max(0, sel - 1); state['confirm'] = None
+        elif a == 'down': sel = min(max(0, len(lst) - 1), sel + 1); state['confirm'] = None
+        elif a == 'b':
+            if state['mode'] == 'found': state['mode'] = 'paired'; sel = 0
+            else: sys.exit(0)
+        elif a == 'x' and state['mode'] == 'paired':
+            state['mode'] = 'found'; sel = 0; state['msg'] = ''; scan()
+        elif a == 'a' and lst:
+            (toggle if state['mode'] == 'paired' else pair)(lst[sel])
+        elif a == 'y' and lst and state['mode'] == 'paired':
+            if state['confirm'] == lst[sel]['mac']:
+                remove(lst[sel]); state['confirm'] = None
+            else:
+                state['confirm'] = lst[sel]['mac']; state['msg'] = f"Press Y again to remove {lst[sel]['name']}"
+    if state['mode'] == 'paired' and not state['busy'] and time.time() - last_refresh > 4:
+        state['paired'] = devices(); last_refresh = time.time()
+    lst = state['paired'] if state['mode'] == 'paired' else state['found']
+    sel = min(sel, max(0, len(lst) - 1))
+
+    screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
+    text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
+    text('Bluetooth' if state['mode'] == 'paired' else 'Pair a new device', 56, TEXT, (px(80), px(95)))
+    sub = 'Your devices' if state['mode'] == 'paired' else 'Put the device in pairing mode now (Xbox pad: hold the small pair button on top until the logo flashes fast)'
+    text(sub, 26, DIM, (px(80), px(170)))
+    y = px(230)
+    if not lst:
+        text('Searching…' if state['busy'] else ('No devices yet - press X to pair one' if state['mode'] == 'paired' else 'Nothing found yet'), 32, DIM, (px(80), y + px(20)))
+    for i, d in enumerate(lst[:9]):
+        r = pygame.Rect(px(80), y, W - px(160), px(84))
+        if i == sel: pill(r, rad=px(16))
+        else: pygame.draw.rect(screen, PANEL, r, border_radius=px(16))
+        text(d['name'], 34, TEXT, (r.x + px(30), r.y + px(10)))
+        info = d['kind'] + (f"   ·   {d['mac']}" if state['mode'] == 'found' else '')
+        text(info, 24, TEXT if i == sel else DIM, (r.x + px(30), r.y + px(52)))
+        if state['mode'] == 'paired':
+            st = 'Connected' if d['connected'] else 'Not connected'
+            rr = text(st, 30, GOOD if d['connected'] else (TEXT if i == sel else DIM), (r.right - px(30), r.centery), 'midright')
+            if d['battery'] is not None:
+                text(f"Battery {d['battery']}%", 26, TEXT if i == sel else DIM, (rr.x - px(40), r.centery), 'midright')
+        y += px(96)
+    if state['busy']:
+        text(state['busy'] + '…', 32, ACCENT_LT, (px(80), H - px(160)))
+    elif state['msg']:
+        text(state['msg'], 30, ACCENT_LT, (px(80), H - px(160)))
+    x = px(80)
+    if state['mode'] == 'paired':
+        cur = lst[sel] if lst else None
+        hints = ([('A', 'Disconnect' if cur and cur['connected'] else 'Connect'), ('Y', 'Remove')] if cur else []) + [('X', 'Pair new device'), ('B', 'Back')]
+    else:
+        hints = [('A', 'Pair'), ('B', 'Back')]
+    for b, l in hints:
+        r = pygame.Rect(x, H - px(75), px(46), px(46)); pill(r); text(b, 22, TEXT, r.center, 'center')
+        x = text(l, 26, DIM, (r.right + px(12), r.centery), 'midleft').right + px(40)
+    pygame.display.flip()
+    if shot:
+        pygame.image.save(screen, shot); sys.exit(0)
+    clock.tick(30)

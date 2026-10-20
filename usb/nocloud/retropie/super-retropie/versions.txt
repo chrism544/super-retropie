@@ -1,0 +1,6 @@
+sunshine 2026.914.233613-1+ubuntu24.04
+app
+quit-helper.py
+VERSION
+xemu-launch.sh
+xemu-launch.sh.before-per-game

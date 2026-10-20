@@ -1,0 +1,9 @@
+[Unit]
+Description=Scrape game artwork (Skyscraper)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/usr/local/bin/retropie-scrape
+Nice=10

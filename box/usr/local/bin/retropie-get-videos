@@ -1,0 +1,44 @@
+#!/bin/bash
+# Download game videos (Skyscraper / ScreenScraper) for the video screensaver.
+#   retropie-get-videos favourites | all
+SKY=/opt/retropie/supplementary/skyscraper/Skyscraper
+R=$HOME/RetroPie/roms
+scope=${1:-favourites}
+log() { echo "$(date +%T) $*"; }
+done_systems=()
+for d in "$R"/*/; do
+    s=$(basename "$d"); [ -L "${d%/}" ] && continue
+    case $s in retropie|searchgames|ports) continue;; esac
+    [ -f "$d/gamelist.xml" ] || continue
+    list=/tmp/videos-$s.txt
+    python3 - "$R/$s" "$scope" > "$list" <<'PY'
+import os, sys, xml.etree.ElementTree as ET
+d, scope = sys.argv[1], sys.argv[2]
+for g in ET.parse(d + '/gamelist.xml').getroot().iter('game'):
+    if g.findtext('hidden') == 'true' or g.findtext('video'):
+        continue
+    if scope == 'favourites' and g.findtext('favorite') != 'true':
+        continue
+    p = g.findtext('path') or ''
+    p = os.path.join(d, p[2:]) if p.startswith('./') else p
+    if os.path.exists(p):
+        print(p)
+PY
+    [ -s "$list" ] || continue
+    log "$s: $(wc -l < "$list") games"
+    nice $SKY -p "$s" -s screenscraper --includefrom "$list" --flags videos,onlymissing,unattend,nohints >/dev/null 2>&1
+    done_systems+=("$s")
+done
+[ ${#done_systems[@]} -eq 0 ] && { log "nothing to do"; exit 0; }
+# write the videos into those game lists (waits until nobody is playing). Favourite and
+# hidden flags are snapshotted and put back - Skyscraper has dropped a favourite before.
+cat > /tmp/videos-apply.sh <<EOF
+for s in ${done_systems[*]}; do
+    G=$R/\$s/gamelist.xml; cp \$G \$G.bak-videos
+    python3 /usr/local/bin/retropie-flags save \$G /tmp/flags-\$s.json
+    $SKY -p \$s --flags videos,unattend,nohints >/dev/null 2>&1
+    python3 /usr/local/bin/retropie-flags restore \$G /tmp/flags-\$s.json
+done
+EOF
+retropie-es-edit bash /tmp/videos-apply.sh
+log "done: ${done_systems[*]}"

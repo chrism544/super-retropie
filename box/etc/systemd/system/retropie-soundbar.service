@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep the Bluetooth soundbar connected
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+ExecStart=/usr/local/bin/retropie-soundbar-reconnect
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

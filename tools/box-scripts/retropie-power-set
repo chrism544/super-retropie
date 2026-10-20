@@ -1,0 +1,10 @@
+#!/bin/sh
+# Sets the CPU long-term power limit (PL1) in watts and remembers it for the next start-up.
+# Usage: retropie-power-set <15-65>     (no argument: apply the saved value; run at boot)
+CONF=/etc/retropie-power-limit
+w=${1:-$(cat $CONF 2>/dev/null || echo 50)}
+case "$w" in ''|*[!0-9]*) echo "watts must be a number" >&2; exit 1;; esac
+[ "$w" -ge 15 ] && [ "$w" -le 65 ] || { echo "watts must be 15-65" >&2; exit 1; }
+echo "${w}000000" > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw || exit 1
+[ -n "${1:-}" ] && echo "$w" > $CONF
+exit 0

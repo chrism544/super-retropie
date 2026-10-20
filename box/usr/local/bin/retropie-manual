@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Game manual viewer (PDF) in the Super RetroPie theme.   retropie-manual <file.pdf> [title]
+D-pad / LB RB: pages, A: zoom (fit page / fit width, then up/down scrolls), B: close."""
+import os, subprocess, sys, tempfile
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+
+pdf = sys.argv[1]; title = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(pdf))[0]
+tmp = tempfile.mkdtemp(prefix='manual-')
+try:
+    info = subprocess.run(['pdfinfo', pdf], capture_output=True, text=True).stdout
+    pages = int(next(l.split()[-1] for l in info.splitlines() if l.startswith('Pages:')))
+except Exception:
+    pages = 1
+cache = {}
+def page(n):
+    if n not in cache:
+        out = f'{tmp}/p{n}'
+        subprocess.run(['pdftoppm', '-r', '110', '-png', '-f', str(n), '-l', str(n), '-singlefile', pdf, out], capture_output=True)
+        try: cache[n] = pygame.image.load(out + '.png').convert()
+        except Exception: cache[n] = None
+    return cache[n]
+
+inp = ui.Input(); n, zoom, scroll = 1, False, 0
+clock = pygame.time.Clock()
+while True:
+    for a in inp.read():
+        if a == 'b': sys.exit(0)
+        elif a in ('right', 'rb'): n = min(pages, n + 1); scroll = 0
+        elif a in ('left', 'lb'): n = max(1, n - 1); scroll = 0
+        elif a == 'a': zoom = not zoom; scroll = 0
+        elif a == 'down' and zoom: scroll += ui.px(180)
+        elif a == 'up' and zoom: scroll = max(0, scroll - ui.px(180))
+    ui.background()
+    p = page(n)
+    if p:
+        aw, ah = ui.W - ui.px(160), ui.H - ui.px(200)
+        k = (aw / p.get_width()) if zoom else min(aw / p.get_width(), ah / p.get_height())
+        img = pygame.transform.smoothscale(p, (int(p.get_width() * k), int(p.get_height() * k)))
+        scroll = min(scroll, max(0, img.get_height() - ah))
+        area = pygame.Rect(0, scroll, img.get_width(), min(ah, img.get_height()))
+        r = area.copy(); r.midtop = (ui.W // 2, ui.px(90))
+        ui.screen.blit(img, r, area)
+    else:
+        ui.text('Could not open this page', 36, ui.DIM, (ui.W // 2, ui.H // 2), 'center')
+    ui.text(title, 28, ui.ACCENT_LT, (ui.px(80), ui.px(40)), maxw=ui.W - ui.px(500))
+    ui.text(f'Page {n} / {pages}', 28, ui.TEXT, (ui.W - ui.px(80), ui.px(40)), 'topright')
+    ui.hints([('◀▶' if False else 'D-PAD', 'Pages'), ('A', 'Fit width' if not zoom else 'Whole page'), ('B', 'Close')])
+    pygame.display.flip(); clock.tick(30)

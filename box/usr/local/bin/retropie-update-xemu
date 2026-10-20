@@ -1,0 +1,31 @@
+#!/bin/bash
+# Keeps xemu (Xbox) on the newest release from GitHub. Run daily by retropie-update-xemu.timer.
+# Skips while a game is being played or Xbox games are being installed. The old version is kept in
+# app.previous; to go back: sudo mv app app.broken && sudo mv app.previous app (in the folder below).
+set -u
+DIR=/opt/retropie/emulators/xemu-appimage
+LOG=/var/log/retropie-update-xemu.log
+log() { echo "$(date '+%F %T') $*" >> $LOG; echo "$*"; }
+
+if /usr/local/bin/retropie-game-running || pgrep -f "[i]nstall-new-xbox-games|[f]inalize-new-xbox-games|[x]emu-appimage/app/" >/dev/null; then
+    log "busy (game running or Xbox install), trying again next time"; exit 0
+fi
+have=$(cat $DIR/VERSION 2>/dev/null || echo unknown)
+tag=$(curl -fsS --max-time 30 https://api.github.com/repos/xemu-project/xemu/releases/latest | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)
+[ -n "$tag" ] || { log "could not check GitHub"; exit 1; }
+[ "$tag" = "$have" ] && { log "up to date ($have)"; exit 0; }
+
+tmp=$(mktemp -d /var/tmp/xemu-update.XXXXXX); trap 'rm -rf "$tmp"' EXIT
+url="https://github.com/xemu-project/xemu/releases/download/v$tag/xemu-$tag-x86_64.AppImage"
+curl -fsSL --max-time 900 -o "$tmp/xemu.AppImage" "$url" || { log "download failed: $url"; exit 1; }
+chmod +x "$tmp/xemu.AppImage"
+(cd "$tmp" && ./xemu.AppImage --appimage-extract >/dev/null 2>&1)
+[ -x "$tmp/squashfs-root/AppRun" ] && [ -x "$tmp/squashfs-root/usr/bin/xemu" ] || { log "new version $tag looks broken, not installed"; exit 1; }
+
+# a game may have started while downloading
+/usr/local/bin/retropie-game-running && { log "game started, will install $tag next time"; exit 0; }
+chown -R pi:pi "$tmp/squashfs-root"
+rm -rf $DIR/app.previous
+mv $DIR/app $DIR/app.previous && mv "$tmp/squashfs-root" $DIR/app || { [ -d $DIR/app ] || mv $DIR/app.previous $DIR/app; log "install of $tag failed, kept $have"; exit 1; }
+echo "$tag" > $DIR/VERSION
+log "updated xemu $have -> $tag"

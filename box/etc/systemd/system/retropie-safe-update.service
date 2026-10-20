@@ -1,0 +1,8 @@
+[Unit]
+Description=Super RetroPie safe update (snapshot, update, test, roll back if broken)
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/retropie-safe-update
+TimeoutStartSec=6h
+Nice=10

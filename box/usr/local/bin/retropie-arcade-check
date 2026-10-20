@@ -1,0 +1,30 @@
+#!/bin/bash
+# Try every visible arcade game in lr-mame headless; if MAME can't start it but FBNeo
+# can, make FBNeo that game's emulator. Low priority; pauses while someone is playing.
+E=/opt/retropie/configs/all/emulators.cfg; R=/home/pi/arcade-check-report.txt
+# Run through links in /tmp so retropie-game-running does not mistake these test runs for a game
+L=/tmp/arcade-check-bin; mkdir -p $L; ln -sf /opt/retropie/emulators/retroarch/bin/retroarch $L/retroarch; ln -sf /opt/retropie/libretrocores/lr-mame $L/lr-mame; ln -sf /opt/retropie/libretrocores/lr-fbneo $L/lr-fbneo
+RA=$L/retroarch; C=/opt/retropie/configs/arcade/retroarch.cfg
+printf 'video_driver = "null"\naudio_driver = "null"\ninput_driver = "null"\n' > /tmp/null.cfg
+try() {  # core rom -> 0 if it starts
+    out=$(timeout 60 nice -n 19 $RA -v --max-frames=60 -L $L/$1 --config $C --appendconfig /tmp/null.cfg "$2" 2>&1)
+    ! grep -qE "NOT FOUND|Required files are missing|Failed to load content|cannot be run|Could not load|not supported" <<<"$out"
+}
+: > $R; ok=0; fixed=0; broken=0
+python3 - <<'PY' > /tmp/arcade-visible.txt
+import xml.etree.ElementTree as ET, os
+d='/home/pi/RetroPie/roms/arcade'
+hid={os.path.basename(g.findtext('path','')) for g in ET.parse(d+'/gamelist.xml').getroot().iter('game') if g.findtext('hidden')=='true'}
+for f in sorted(os.listdir(d)):
+    if f.endswith(('.zip','.7z')) and f not in hid: print(f)
+PY
+while read -r f; do
+    while retropie-game-running; do sleep 30; done
+    g=${f%.*}; key="arcade_$(echo "$g" | sed 's/[^a-zA-Z0-9]/_/g')"
+    grep -q "^$key " $E 2>/dev/null && continue
+    if try lr-mame/mamearcade_libretro.so "/home/pi/RetroPie/roms/arcade/$f"; then ok=$((ok+1))
+    elif try lr-fbneo/fbneo_libretro.so "/home/pi/RetroPie/roms/arcade/$f"; then
+        echo "$key = \"lr-fbneo\"" >> $E; echo "FBNEO  $f" >> $R; fixed=$((fixed+1))
+    else echo "BROKEN $f  ($(grep -m1 -E 'NOT FOUND|missing|Failed' <<<"$out" | cut -c1-120))" >> $R; broken=$((broken+1)); fi
+done < /tmp/arcade-visible.txt
+echo "done $(date): $ok run on MAME, $fixed switched to FBNeo, $broken start on neither" | tee -a $R

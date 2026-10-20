@@ -1,0 +1,9 @@
+#!/bin/bash
+# Exit 0 if someone is busy on the box: EmulationStation's launcher (runcommand) is active, any
+# emulator from RetroPie's folders is running (also covers games started outside ES), or one of the
+# RetroPie menu screens / game search is open - background jobs then wait instead of reloading
+# EmulationStation underneath them.
+# Matches by path, not process name - PCSX2's AppImage runs as "AppRun", which name-based
+# checks ("pcsx2-qt") missed and so started jobs on top of a PS2 game (Oct 2026).
+# The [r]/[o] brackets stop the pattern matching a shell whose command line contains it.
+pgrep -f '[r]uncommand\.sh|[o]pt/retropie/(emulators|libretrocores)/|[r]etropie-menu-launch|[r]etropie-search-ui|[r]etropiemenu launch' >/dev/null

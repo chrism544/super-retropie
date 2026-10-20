@@ -1,0 +1,84 @@
+#cloud-config
+# Ubuntu Server 24.04 unattended install for a Datto Alto -> RetroPie box.
+# __PLACEHOLDERS__ are filled in by Prepare-RetroPieUsb.ps1.
+# WARNING: this wipes the Alto's internal disk with no confirmation prompt.
+autoinstall:
+  version: 1
+  interactive-sections: []
+  locale: en_GB.UTF-8
+  keyboard:
+    layout: gb
+  timezone: Europe/London
+  # Never swap in a newer installer: a refreshed subiquity picked a kernel that wasn't in
+  # the ISO's package pool ("Unable to locate package linux-generic-hwe-24.04", Oct 2026)
+  refresh-installer:
+    update: false
+  # Wait (up to 3 min) until the NIC has an address and the archive answers. Without this
+  # the mirror check ran before DHCP finished and the install silently went offline.
+  early-commands:
+    - |
+      for i in $(seq 1 90); do
+        python3 -c 'import urllib.request; urllib.request.urlopen("http://archive.ubuntu.com/ubuntu/dists/noble/Release", timeout=5)' 2>/dev/null && exit 0
+        sleep 2
+      done
+      echo "No internet after 3 minutes - aborting rather than installing offline" >&2
+      exit 1
+  apt:
+    geoip: false
+    # Default is offline-install (cdrom pool only) - fail loudly instead
+    fallback: abort
+    mirror-selection:
+      primary:
+        - uri: http://gb.archive.ubuntu.com/ubuntu
+        - uri: http://archive.ubuntu.com/ubuntu
+  identity:
+    hostname: __HOSTNAME__
+    realname: RetroPie
+    username: __USERNAME__
+    password: '__PASSWORD_HASH__'
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - '__SSH_PUBKEY__'
+  # No "kernel:" key - the installer uses the ISO's own kernel, which is always in its pool.
+  # The HWE kernel + headers are installed online on first boot (install-retropie.sh).
+  storage:
+    layout:
+      name: direct
+      # The internal NVMe only - never the USB stick
+      match:
+        path: /dev/nvme*
+  network:
+    version: 2
+    ethernets:
+      wired:
+        match:
+          name: "en*"
+        dhcp4: true
+        optional: true
+__WIFI_BLOCK__
+  packages:
+    - linux-firmware
+    - intel-microcode
+    - amd64-microcode
+    - wpasupplicant
+    - wireless-regdb
+    - iw
+    - rfkill
+    - bluez
+    - bluez-tools
+    - git
+    - dkms
+    - build-essential
+  late-commands:
+    # Fail the install (instead of leaving an unbootable disk) if curtin didn't restore
+    # update-initramfs or no initramfs was built - "VFS: Unable to mount root fs", Oct 2026
+    - curtin in-target --target=/target -- sh -c '[ "$(dpkg-divert --truename /usr/sbin/update-initramfs)" = /usr/sbin/update-initramfs ] && ls /boot/initrd.img-*'
+    - mkdir -p /target/opt/retropie-bootstrap
+    - cp -r /cdrom/nocloud/retropie/. /target/opt/retropie-bootstrap/
+    - chmod +x /target/opt/retropie-bootstrap/*.sh
+    - cp /target/opt/retropie-bootstrap/retropie-firstboot.service /target/etc/systemd/system/
+    - curtin in-target --target=/target -- systemctl enable retropie-firstboot.service
+    - curtin in-target --target=/target -- systemctl enable bluetooth.service
+    - echo '__USERNAME__' > /target/opt/retropie-bootstrap/user

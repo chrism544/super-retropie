@@ -1,0 +1,192 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./gameartwork.sh</path>
+		<name>Game Artwork</name>
+		<desc>Choose how the artwork around games (bezels) looks: fit the whole game, the original artwork, or none - and dimmed or full brightness. Shows a preview.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/esthemes.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./filemanager.sh</path>
+		<name>File Manager</name>
+		<desc>Browse and manage files (Midnight Commander). Hold View + Menu to close it.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/filemanager.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./retronetplay.rp</path>
+		<name>RetroArch Net Play</name>
+		<desc>Set up RetroArch Netplay options, choose host or client, port, host IP, delay frames, and your nickname.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/retronetplay.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	<hidden>true</hidden></game>
+	<game>
+		<path>./rpsetup.rp</path>
+		<name>RetroPie Setup</name>
+		<desc>Install RetroPie from binary or source, install experimental packages, additional drivers, edit Samba shares, custom scraper, as well as other RetroPie-related configurations.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/rpsetup.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	<hidden>true</hidden></game>
+	<game>
+		<path>./bluetooth.sh</path>
+		<name>Bluetooth</name>
+		<desc>Your controllers and speakers: connect, disconnect, battery level, pair new devices and remove old ones.</desc>
+		<image>./icons/bluetooth.png</image>
+		<playcount>2</playcount>
+		<lastplayed>20261009T223543</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./showip.rp</path>
+		<name>Show IP</name>
+		<desc>Displays your current IP address, as well as other information provided by the command "ip addr show."</desc>
+		<image>./icons/showip.png</image>
+		<hidden>true</hidden>
+		<playcount>1</playcount>
+		<lastplayed>20261017T222311</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./configedit.sh</path>
+		<name>Game Settings</name>
+		<desc>Common game settings for all consoles or one console. Advanced: game launch logs, network, performance, RetroPie Netplay, RetroPie Setup and every RetroArch setting.</desc>
+		<image>./icons/configedit.png</image>
+		<playcount>1</playcount>
+		<lastplayed>20261017T223343</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./esthemes.sh</path>
+		<name>ES Themes</name>
+		<desc>Browse EmulationStation themes with previews. Switch theme, download new ones, update or remove them.</desc>
+		<image>./icons/esthemes.png</image>
+		<playcount>3</playcount>
+		<lastplayed>20261017T223312</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./retroarch.rp</path>
+		<name>Retroarch</name>
+		<desc>Launches the RetroArch GUI so you can change RetroArch options. Note: Changes will not be saved unless you have enabled the "Save Configuration On Exit" option.</desc>
+		<image>./icons/retroarch.png</image>
+		<playcount>1</playcount>
+		<lastplayed>20261017T222746</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./runcommand.rp</path>
+		<name>Launch Options</name>
+		<desc>Change what appears on the runcommand screen. Enable or disable the menu, enable or disable box art, and change CPU configuration.</desc>
+		<image>./icons/runcommand.png</image>
+		<playcount>1</playcount>
+		<lastplayed>20261017T222732</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./screensaver.sh</path>
+		<name>Screensaver</name>
+		<desc>Dim, black, game pictures or game videos - when it starts, how often it changes, game names and video sound. Can download game videos.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/esthemes.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./kidmode.sh</path>
+		<name>Kid Mode</name>
+		<desc>Lock the box for guests (Kiosk) or children (Kid: kid-friendly games only), set the unlock code and mark kid-friendly games.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/runcommand.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./music.sh</path>
+		<name>Menu Music</name>
+		<desc>Music in the menus - on/off, volume, next track. Pauses while you play. Add your own MP3s to \super-retropie\music.</desc>
+		<image>./icons/audiosettings.png</image>
+		<playcount>1</playcount>
+		<lastplayed>20261017T232004</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./savemanager.sh</path>
+		<name>Save Manager</name>
+		<desc>Every game with saves, newest first. Restore an earlier copy (taken after every game and every night), take a copy now, or delete a stuck resume point.</desc>
+		<image>./icons/configedit.png</image>
+		<playcount>1</playcount>
+		<lastplayed>20261017T231948</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./playstats.sh</path>
+		<name>Play Stats</name>
+		<desc>How long you have played: total, this week, day streak, top games, consoles and recent sessions.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/runcommand.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./showip.sh</path>
+		<name>Network</name>
+		<desc>Address and connection status, live download/upload speed, internet speed test, and automatic (DHCP) or fixed IP settings.</desc>
+		<image>./icons/showip.png</image>
+		<playcount>3</playcount>
+		<lastplayed>20261018T194619</lastplayed>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	<hidden>true</hidden></game>
+	<game>
+		<path>./gamehelp.sh</path>
+		<name>Game Help</name>
+		<desc>Where to go next in Zelda - A Link to the Past, read from your save: next dungeon and how to get there, dungeon checklist and missing items.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/showip.png</image>
+		<genre>Settings</genre>
+		<developer>Super RetroPie</developer>
+		<players />
+	</game>
+	<game>
+		<path>./performance.sh</path>
+		<name>Performance</name>
+		<desc>Processor power mode (Cool, Standard, or Performance for faster Xbox, PS2 and Wii games), live temperature and fan speed, and automatic Xbox emulator updates.</desc>
+		<image>/home/pi/RetroPie/retropiemenu/icons/rpsetup.png</image>
+	<hidden>true</hidden></game>
+	<game>
+		<path>./bootscreen.sh</path>
+		<name>Boot Screen</name>
+		<desc>Choose the picture shown while the box starts up and while EmulationStation loads - with a preview.</desc>
+		<image>./icons/splashscreen.png</image>
+		<developer>Super RetroPie</developer>
+		<genre>Settings</genre>
+		<players></players>
+		<playcount>4</playcount>
+		<lastplayed>20261019T212946</lastplayed>
+	</game>
+</gameList>

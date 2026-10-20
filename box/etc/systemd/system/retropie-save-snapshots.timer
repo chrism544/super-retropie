@@ -1,0 +1,7 @@
+[Unit]
+Description=Nightly game save snapshots
+[Timer]
+OnCalendar=*-*-* 04:15
+Persistent=true
+[Install]
+WantedBy=timers.target

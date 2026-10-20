@@ -1,0 +1,321 @@
+#!/usr/bin/env python3
+"""RetroPie menu > ES Themes: theme browser with previews, in the EmulationStation theme.
+
+  retropie-themes            controller UI
+  retropie-themes --fetch    download/refresh preview pictures (runs in the background)
+
+Theme list = RetroPie-Setup's esthemes module (same repos it installs from); installing,
+updating and removing go through RetroPie-Setup itself. Previews: a picture inside the
+installed theme folder, else the first image in the theme's README on GitHub.
+"""
+import io, json, os, re, subprocess, sys, time, urllib.request
+
+HOME = os.path.expanduser('~')
+MODULE = HOME + '/RetroPie-Setup/scriptmodules/supplementary/esthemes.sh'
+THEMES = '/etc/emulationstation/themes'
+CACHE = HOME + '/.cache/retropie-themes'
+SETTINGS = HOME + '/.emulationstation/es_settings.cfg'
+UA = {'User-Agent': 'retropie-themes'}
+
+def catalog():
+    src = open(MODULE).read()
+    out, seen = [], set()
+    for block in re.findall(r'themes\+?=\((.*?)\n\s*\)', src, re.S):
+        for owner, theme, branch in re.findall(r"'(\S+) (\S+?)(?: (\S+))?'", block):
+            name = theme + ('-' + branch if branch else '')
+            if name in seen:
+                continue
+            seen.add(name)
+            out.append({'owner': owner, 'theme': theme, 'branch': branch, 'name': name})
+    return out
+
+def current_theme():
+    m = re.search(r'name="ThemeSet" value="([^"]*)"', open(SETTINGS).read())
+    return m.group(1) if m else ''
+
+def preview_path(name):
+    return os.path.join(CACHE, name + '.jpg')
+
+def local_picture(folder):
+    best = None
+    for root, ds, fs in os.walk(folder):
+        if root.count(os.sep) - folder.count(os.sep) > 1:
+            continue
+        for f in fs:
+            if re.search(r'(screenshot|preview|screen|theme)[^/]*\.(png|jpe?g)$', f, re.I):
+                p = os.path.join(root, f)
+                if best is None or os.path.getsize(p) > os.path.getsize(best):
+                    best = p
+    return best
+
+GALLERY = 'https://raw.githubusercontent.com/wetriner/es-theme-gallery/master/'   # used by the RetroPie docs
+
+def get(url):
+    from PIL import Image
+    try:
+        d = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20).read()
+        Image.open(io.BytesIO(d)).verify()
+        return d
+    except Exception:
+        return None
+
+def save(data, out):
+    from PIL import Image
+    os.makedirs(CACHE, exist_ok=True)
+    im = Image.open(io.BytesIO(data)).convert('RGB'); im.thumbnail((960, 720)); im.save(out, quality=88)
+
+def fetch(t):
+    """Store previews for theme t (system view, plus game list view if the gallery has one)."""
+    out = preview_path(t['name'])
+    if os.path.exists(out) and time.time() - os.path.getmtime(out) < 30 * 86400:
+        return True
+    for n in dict.fromkeys((t['name'], t['theme'])):
+        main = get(GALLERY + n + '.png')
+        if main:
+            save(main, out)
+            gl = get(GALLERY + n + '-gamelist.png')
+            if gl:
+                save(gl, out[:-4] + '-gamelist.jpg')
+            return True
+    data = None
+    folder = os.path.join(THEMES, t['name'])
+    pic = local_picture(folder) if os.path.isdir(folder) else None
+    if pic:
+        data = open(pic, 'rb').read()
+    else:
+        ref = t['branch'] or 'HEAD'
+        base = f"https://raw.githubusercontent.com/{t['owner']}/es-theme-{t['theme']}/{ref}/"
+        for readme in ('README.md', 'readme.md', 'Readme.md'):
+            try:
+                md = urllib.request.urlopen(urllib.request.Request(base + readme, headers=UA), timeout=15).read().decode('utf8', 'ignore')
+            except Exception:
+                continue
+            urls = re.findall(r'!\[[^\]]*\]\(\s*([^)\s]+)', md) + re.findall(r'<img[^>]+src="([^"]+)"', md)
+            for u in urls:
+                if u.startswith('http'):
+                    u = re.sub(r'github\.com/([^/]+)/([^/]+)/(?:blob|raw)/', r'raw.githubusercontent.com/\1/\2/', u)
+                else:
+                    u = base + u.lstrip('./')
+                if re.search(r'shields\.io|badge|\.svg', u):
+                    continue
+                try:
+                    data = urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=20).read()
+                    Image.open(io.BytesIO(data)).verify()
+                    break
+                except Exception:
+                    data = None
+            if data:
+                break
+    if not data:
+        return False
+    save(data, out)
+    return True
+
+if '--fetch' in sys.argv:
+    found = sum(1 for t in catalog() if fetch(t))
+    print(f'{found} previews'); sys.exit(0)
+
+# ------------------------------------------------------------------ UI
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+FONT = THEMES + '/bluray/_inc/fonts/Roboto-Medium.ttf'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL, GOOD = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32), (90, 200, 120)
+pygame.init()
+shot = os.environ.get('THEMES_SHOT')
+screen = pygame.display.set_mode((1920, 1080)) if shot else pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size(); S = H / 1080
+px = lambda v: int(v * S)
+fonts = {}
+def font(n):
+    if n not in fonts:
+        fonts[n] = pygame.font.Font(FONT, px(n)) if os.path.exists(FONT) else pygame.font.SysFont('dejavusans', px(n))
+    return fonts[n]
+def text(t, n, c, pos, anchor='topleft', maxw=None):
+    f = font(n)
+    if maxw and f.size(t)[0] > maxw:
+        while t and f.size(t + '…')[0] > maxw: t = t[:-1]
+        t += '…'
+    s = f.render(t, True, c); r = s.get_rect(**{anchor: pos}); screen.blit(s, r); return r
+def pill(r, c=ACCENT, radius=None):
+    rad = r.h // 2 if radius is None else radius
+    pygame.draw.rect(screen, c, r, border_radius=rad)
+    g = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(g, (255, 255, 255, 45), (0, 0, r.w, r.h // 2), border_radius=rad); screen.blit(g, r.topleft)
+try:
+    BG = pygame.transform.smoothscale(pygame.image.load(THEMES + '/bluray/_inc/ingame-global-bg.png').convert(), (W, H))
+except Exception:
+    BG = None
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+def busy(msg):
+    screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
+    text(msg, 44, TEXT, (W // 2, H // 2), 'center'); text('Please wait…', 30, DIM, (W // 2, H // 2 + px(60)), 'center')
+    pygame.display.flip()
+
+def rp(*args):
+    return subprocess.run(['sudo', '-n', HOME + '/RetroPie-Setup/retropie_packages.sh', 'esthemes'] + list(args),
+                          capture_output=True, text=True).returncode == 0
+
+def switch_theme(name):
+    """Restart EmulationStation on another theme (kill -9 so it can't save the old one back)."""
+    script = f'''sleep 2; touch /tmp/es-hold; pkill -9 -x emulationstatio; sleep 1
+sed -i 's|name="ThemeSet" value="[^"]*"|name="ThemeSet" value="{name}"|' "{SETTINGS}"; rm -f /tmp/es-hold'''
+    subprocess.Popen(['setsid', 'bash', '-c', script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+themes = catalog()
+_inst = {}
+def installed(t, refresh=False):                 # cached - checked ~500 times a frame otherwise
+    if refresh or t['name'] not in _inst:
+        _inst[t['name']] = os.path.isdir(os.path.join(THEMES, t['name']))
+    return _inst[t['name']]
+cur = current_theme()
+themes.sort(key=lambda t: (t['name'] != cur, not installed(t), t['name'].lower()))
+sel, top, ROWS = 0, 0, 13
+imgs, msg = {}, ''
+ignore = time.time() + 0.6
+held, rep = None, 0
+clock = pygame.time.Clock()
+
+import threading
+fetching = set()
+def fetch_bg(t):
+    """Download a missing preview without blocking the screen."""
+    if t['name'] in fetching:
+        return
+    fetching.add(t['name'])
+    def job():
+        try:
+            ok = fetch(t)
+        except Exception:
+            ok = False
+        if ok:
+            imgs.pop(t['name'], None)              # load it on the next frame
+        else:
+            imgs[t['name']] = []                   # nothing to show: "No preview available"
+        fetching.discard(t['name'])
+    threading.Thread(target=job, daemon=True).start()
+
+def preview(t):
+    if t['name'] not in imgs:
+        p = preview_path(t['name'])
+        if not os.path.exists(p):
+            fetch_bg(t)
+            return None, 'downloading'
+        pics = []
+        for f in (p, p[:-4] + '-gamelist.jpg'):     # system view, then game list view
+            try:
+                im = pygame.image.load(f).convert()
+                bw, bh = W - px(900), px(560)
+                k = min(bw / im.get_width(), bh / im.get_height())
+                pics.append(pygame.transform.smoothscale(im, (int(im.get_width() * k), int(im.get_height() * k))))
+            except Exception:
+                pass
+        imgs[t['name']] = pics
+    pics = imgs[t['name']]
+    if not pics:
+        return None, ''
+    i = int(time.time() / 3) % len(pics)            # alternate every 3 s
+    return pics[i], ('Main screen' if i == 0 else 'Game list') if len(pics) > 1 else ''
+
+while True:
+    acts = []
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT: sys.exit(0)
+        if time.time() < ignore: continue
+        if e.type == pygame.JOYBUTTONDOWN:
+            acts.append({0: 'a', 1: 'b', 2: 'x', 3: 'y', 4: 'pgup', 5: 'pgdn'}.get(e.button))
+        elif e.type == pygame.JOYHATMOTION:
+            d = {(0, 1): 'up', (0, -1): 'down'}.get(e.value); held, rep = d, time.time() + 0.45
+            if d: acts.append(d)
+        elif e.type == pygame.JOYAXISMOTION and e.axis == 1:
+            d = 'up' if e.value < -0.6 else 'down' if e.value > 0.6 else None
+            if d != held:
+                held, rep = d, time.time() + 0.45
+                if d: acts.append(d)
+        elif e.type == pygame.KEYDOWN and not pads:      # RetroPie menu runs joy2key: pad also arrives as keys
+            acts.append({pygame.K_UP: 'up', pygame.K_DOWN: 'down', pygame.K_RETURN: 'a', pygame.K_ESCAPE: 'b'}.get(e.key))
+    if held and time.time() > rep:
+        acts.append(held); rep = time.time() + 0.12
+    for a in acts:
+        t = themes[sel]
+        if a == 'up': sel = (sel - 1) % len(themes)
+        elif a == 'down': sel = (sel + 1) % len(themes)
+        elif a == 'pgup': sel = max(0, sel - ROWS)
+        elif a == 'pgdn': sel = min(len(themes) - 1, sel + ROWS)
+        elif a == 'b': sys.exit(0)
+        elif a == 'a':
+            if not installed(t):
+                busy(f"Downloading {t['name']}")
+                if not rp('install_theme', t['theme'], t['owner'], *( [t['branch']] if t['branch'] else [])):
+                    msg = 'Download failed - check the internet connection'; continue
+                imgs.pop(t['name'], None); installed(t, True)
+            busy(f"Switching to {t['name']}")
+            switch_theme(t['name']); sys.exit(0)
+        elif a == 'x' and installed(t):
+            busy(f"Updating {t['name']}")
+            msg = 'Updated' if rp('install_theme', t['theme'], t['owner'], *([t['branch']] if t['branch'] else [])) else 'Update failed'
+        elif a == 'y' and installed(t):
+            if t['name'] == cur:
+                msg = 'This is the theme in use - switch to another one first'
+            else:
+                busy(f"Removing {t['name']}")
+                msg = 'Removed' if rp('uninstall_theme', t['name']) else 'Remove failed'; installed(t, True)
+    top = min(max(top, sel - ROWS + 1), sel)
+
+    screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
+    text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
+    text('EmulationStation Themes', 56, TEXT, (px(80), px(95)))
+    n_inst = sum(installed(t) for t in themes)
+    text(f'{len(themes)} themes  ·  {n_inst} installed', 26, DIM, (px(80), px(170)))
+    lx, ly, lw, rh = px(80), px(220), px(700), px(57)
+    for i in range(top, min(len(themes), top + ROWS)):
+        t = themes[i]
+        r = pygame.Rect(lx, ly + (i - top) * rh, lw, rh - px(6))
+        if i == sel: pill(r, radius=px(12))
+        name = t['name'] + ('' if t['owner'] == 'RetroPie' else f"   by {t['owner']}")
+        text(name, 28, TEXT, (r.x + px(56), r.centery), 'midleft', maxw=lw - px(70))
+        if t['name'] == cur:
+            pygame.draw.circle(screen, GOOD, (r.x + px(28), r.centery), px(9))
+        elif installed(t):
+            pygame.draw.circle(screen, TEXT if i == sel else ACCENT_LT, (r.x + px(28), r.centery), px(9), width=px(3))
+    if len(themes) > ROWS:
+        bar = pygame.Rect(lx + lw + px(12), ly, px(6), ROWS * rh)
+        pygame.draw.rect(screen, (40, 60, 80), bar, border_radius=px(3))
+        th = max(px(30), bar.h * ROWS // len(themes)); ty = bar.y + (bar.h - th) * top // max(1, len(themes) - ROWS)
+        pygame.draw.rect(screen, ACCENT_LT, (bar.x, ty, bar.w, th), border_radius=px(3))
+    t = themes[sel]
+    dx = px(850)
+    text(t['name'], 48, TEXT, (dx, px(215)), maxw=W - dx - px(80))
+    status = 'In use' if t['name'] == cur else 'Installed' if installed(t) else 'Not installed - A downloads it'
+    text(f"by {t['owner']}   ·   {status}", 28, GOOD if t['name'] == cur else ACCENT_LT, (dx, px(280)))
+    img, label = preview(t)
+    box = pygame.Rect(dx, px(335), W - dx - px(80), px(560))
+    if img:
+        r = img.get_rect(midtop=box.midtop); screen.blit(img, r)
+        pygame.draw.rect(screen, ACCENT, r.inflate(px(6), px(6)), width=px(3), border_radius=px(6))
+        if label:
+            text(label, 24, DIM, (r.right, r.bottom + px(12)), 'topright')
+    else:
+        pygame.draw.rect(screen, PANEL, box, border_radius=px(14))
+        text('Preview downloading…' if label == 'downloading' else 'No preview available', 32, DIM, box.center, 'center')
+    if msg:
+        text(msg, 28, ACCENT_LT, (dx, px(915)))
+    x = px(80)
+    hints = [('A', 'Use' if installed(t) else 'Download & use')] + ([('X', 'Update'), ('Y', 'Remove')] if installed(t) else []) + [('LB/RB', 'Page'), ('B', 'Back')]
+    for b, l in hints:
+        r = pygame.Rect(x, H - px(75), max(px(46), font(22).size(b)[0] + px(24)), px(46)); pill(r)
+        text(b, 22, TEXT, r.center, 'center')
+        x = text(l, 26, DIM, (r.right + px(12), r.centery), 'midleft').right + px(40)
+    pygame.display.flip()
+    if shot:
+        pygame.image.save(screen, shot); sys.exit(0)
+    clock.tick(60)

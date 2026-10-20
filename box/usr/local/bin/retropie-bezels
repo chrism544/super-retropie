@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Game artwork (bezels) settings - RetroPie menu > Game Artwork.
+
+Styles:  fit       whole game picture visible, artwork enlarged a little around it
+         original  artwork as designed (its frame covers a sliver of the game edges)
+         off       no artwork
+Brightness: dim (50 %) or full.
+
+  retropie-bezels            controller menu in the EmulationStation theme
+  retropie-bezels --apply    re-apply the saved choice to every game (after adding bezels)
+
+Each game with artwork has  <overlay dir>/<Name>.png  (original), and this makes
+<Name>.fit.png + the two overlay .cfg files; the per-game RetroArch config
+(config/<core>/<rom>.cfg, marked "# bezel") is pointed at the chosen one.
+"""
+import glob, json, os, re, sys
+
+OVL = '/opt/retropie/configs/all/retroarch/overlay/GameBezels'
+CFG = '/opt/retropie/configs/all/retroarch/config'
+STATE = os.path.expanduser('~/.config/retropie-bezels.json')
+GAME_W, GAME_H = 1440, 1080          # a 4:3 picture on a 1080p screen
+
+def load():
+    try:
+        return json.load(open(STATE))
+    except Exception:
+        return {'style': 'fit', 'bright': 'dim'}
+
+def make_fit(png):
+    """Enlarge the art so its see-through window covers the whole 4:3 picture."""
+    out = png[:-4] + '.fit.png'
+    if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(png):
+        return out
+    from PIL import Image
+    im = Image.open(png).convert('RGBA'); W, H = im.size
+    a = im.getchannel('A')
+    xs = [x for x in range(W) if a.getpixel((x, H // 2)) < 10]
+    ys = [y for y in range(H) if a.getpixel((W // 2, y)) < 10]
+    if not xs or not ys:
+        im.save(out); return out
+    hw, hh = xs[-1] - xs[0] + 1, ys[-1] - ys[0] + 1
+    gw = GAME_W if hw >= hh else GAME_H * 3 // 4      # vertical arcade games: 3:4 picture
+    k = max(gw * W / 1920 / hw, GAME_H * H / 1080 / hh, 1.0) * 1.004
+    big = im.resize((round(W * k), round(H * k)), Image.LANCZOS)
+    cx, cy = (xs[0] + xs[-1]) / 2 * k, (ys[0] + ys[-1]) / 2 * k
+    l, t = round(cx - W / 2), round(cy - H / 2)
+    big.crop((l, t, l + W, t + H)).save(out)
+    return out
+
+def overlay_cfg(png):
+    path = png[:-4] + '.cfg'
+    with open(path, 'w') as f:
+        f.write(f'overlays = 1\noverlay0_overlay = "{os.path.basename(png)}"\noverlay0_full_screen = true\noverlay0_descs = 0\n')
+    return path
+
+def apply(s):
+    n = 0
+    # per-game configs, plus each system's retroarch.cfg (console artwork for the rest)
+    for cfg in glob.glob(f'{CFG}/*/*.cfg') + glob.glob('/opt/retropie/configs/*/retroarch.cfg'):
+        try:
+            txt = open(cfg).read()
+        except OSError:
+            continue
+        m = re.search(r'^input_overlay = "([^"]*/overlay/(?:GameBezels|ArcadeBezels|SystemBezels)/[^"]*)"', txt, re.M)
+        if not m:
+            continue
+        orig_png = re.sub(r'(\.fit)?\.cfg$', '.png', m.group(1))
+        if not os.path.exists(orig_png):
+            continue
+        png = make_fit(orig_png) if s['style'] == 'fit' else orig_png
+        ovl = overlay_cfg(png)
+        lines = [l for l in txt.splitlines() if not re.match(r'(input_overlay|input_overlay_enable|input_overlay_opacity) = ', l)]
+        lines += [f'input_overlay = "{ovl}"',
+                  f'input_overlay_enable = "{"false" if s["style"] == "off" else "true"}"',
+                  f'input_overlay_opacity = "{"0.500000" if s["bright"] == "dim" else "1.000000"}"']
+        open(cfg, 'w').write('\n'.join(lines) + '\n')
+        n += 1
+    return n
+
+if '--apply' in sys.argv:
+    print(f'{apply(load())} games updated'); sys.exit(0)
+
+# ------------------------------------------------------------------ menu
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import time, pygame
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32)
+pygame.init()
+screen = (pygame.display.set_mode((1920, 1080)) if os.environ.get('BEZEL_SHOT')
+          else pygame.display.set_mode((0, 0), pygame.FULLSCREEN))
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size(); S = H / 1080
+px = lambda v: int(v * S)
+fonts = {}
+def font(n):
+    if n not in fonts:
+        fonts[n] = pygame.font.Font(FONT, px(n)) if os.path.exists(FONT) else pygame.font.SysFont('dejavusans', px(n))
+    return fonts[n]
+try:
+    BG = pygame.transform.smoothscale(pygame.image.load(THEME + '/_inc/ingame-global-bg.png').convert(), (W, H))
+except Exception:
+    BG = None
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+OPTIONS = [
+    ('style', 'fit', 'Fit whole game', 'The whole game picture is visible. The artwork is enlarged a little, so its outer edges are trimmed.'),
+    ('style', 'original', 'Original artwork', 'Artwork exactly as designed. Its frame covers a thin strip around the edges of the game.'),
+    ('style', 'off', 'No artwork', 'Black bars at the sides, as before.'),
+    ('bright', 'dim', 'Dimmed', 'Artwork at half brightness - keeps your eye on the game.'),
+    ('bright', 'full', 'Full brightness', 'Artwork at full colour.'),
+]
+s = load(); sel = 0; msg = ''
+ignore = time.time() + 0.6
+def pill(r, c=ACCENT):
+    pygame.draw.rect(screen, c, r, border_radius=r.h // 2)
+    g = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(g, (255, 255, 255, 45), (0, 0, r.w, r.h // 2), border_radius=r.h // 2); screen.blit(g, r.topleft)
+def text(t, n, c, pos, anchor='topleft'):
+    surf = font(n).render(t, True, c); r = surf.get_rect(**{anchor: pos}); screen.blit(surf, r); return r
+def wrap(t, n, w):
+    out, cur = [], ''
+    for word in t.split():
+        x = (cur + ' ' + word).strip()
+        if font(n).size(x)[0] <= w: cur = x
+        else: out.append(cur); cur = word
+    return out + [cur]
+
+SAMPLE = '/usr/local/share/retropie-bezels'
+previews = {}
+def make_preview(style, bright):
+    """Sample game frame (Luigi's Mansion) with the sample bezel in the given style."""
+    try:
+        game = pygame.image.load(SAMPLE + '/sample.png').convert()
+        if style != 'off':
+            png = SAMPLE + ('/sample-bezel.fit.png' if style == 'fit' else '/sample-bezel.png')
+            b = pygame.image.load(png).convert_alpha()
+            b = pygame.transform.smoothscale(b, game.get_size())
+            if bright == 'dim':
+                dark = pygame.Surface(b.get_size(), pygame.SRCALPHA); dark.fill((128, 128, 128, 255))
+                b.blit(dark, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+            game.blit(b, (0, 0))
+        w = W - px(920) - px(80)
+        return pygame.transform.smoothscale(game, (w, w * 9 // 16))
+    except Exception:
+        return None
+
+held, rep = None, 0
+clock = pygame.time.Clock()
+while True:
+    acts = []
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT: sys.exit(0)
+        if time.time() < ignore: continue
+        if e.type == pygame.JOYBUTTONDOWN:
+            acts.append({0: 'a', 1: 'b'}.get(e.button))
+        elif e.type == pygame.JOYHATMOTION:
+            d = {(0, 1): 'up', (0, -1): 'down'}.get(e.value); held, rep = d, time.time() + 0.5
+            if d: acts.append(d)
+        elif e.type == pygame.JOYAXISMOTION and e.axis == 1:
+            d = 'up' if e.value < -0.6 else 'down' if e.value > 0.6 else None
+            if d != held:
+                held, rep = d, time.time() + 0.5
+                if d: acts.append(d)
+        elif e.type == pygame.KEYDOWN and not pads:   # RetroPie menu runs joy2key: the pad also arrives as keys
+            acts.append({pygame.K_UP: 'up', pygame.K_DOWN: 'down', pygame.K_RETURN: 'a', pygame.K_ESCAPE: 'b'}.get(e.key))
+    if held and time.time() > rep:
+        acts.append(held); rep = time.time() + 0.25
+    for a in acts:
+        if a == 'up': sel = (sel - 1) % len(OPTIONS)
+        elif a == 'down': sel = (sel + 1) % len(OPTIONS)
+        elif a == 'b': sys.exit(0)
+        elif a == 'a':
+            key, val = OPTIONS[sel][:2]
+            s[key] = val
+            os.makedirs(os.path.dirname(STATE), exist_ok=True); json.dump(s, open(STATE, 'w'))
+            msg = f'Saved - {apply(s)} games updated. Takes effect next time a game starts.'
+    if BG: screen.blit(BG, (0, 0))
+    else: screen.fill((0, 0, 0))
+    text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
+    text('Game Artwork', 56, TEXT, (px(80), px(95)))
+    y = px(220)
+    for i, (key, val, label, desc) in enumerate(OPTIONS):
+        if i == 3:
+            text('BRIGHTNESS', 26, DIM, (px(80), y + px(10))); y += px(55)
+        elif i == 0:
+            text('STYLE', 26, DIM, (px(80), y - px(45)))
+        r = pygame.Rect(px(80), y, px(760), px(72))
+        if i == sel: pill(r)
+        else: pygame.draw.rect(screen, PANEL, r, border_radius=r.h // 2)
+        on = s.get(key) == val                      # radio marker (drawn - the theme font has no ● glyph)
+        c = (r.x + px(44), r.centery)
+        pygame.draw.circle(screen, TEXT, c, px(13), width=max(2, px(3)))
+        if on:
+            pygame.draw.circle(screen, TEXT if i == sel else ACCENT_LT, c, px(7))
+        text(label, 34, TEXT, (r.x + px(76), r.centery), 'midleft')
+        y += px(88)
+    dx = px(920)
+    text(OPTIONS[sel][2], 40, ACCENT_LT, (dx, px(240)))
+    yy = px(300)
+    for line in wrap(OPTIONS[sel][3], 32, W - dx - px(80)):
+        text(line, 32, (215, 225, 235), (dx, yy)); yy += px(46)
+    # preview: the highlighted option combined with the saved one
+    prev = dict(s); prev[OPTIONS[sel][0]] = OPTIONS[sel][1]
+    key = (prev['style'], prev['bright'])
+    if key not in previews:
+        previews[key] = make_preview(*key)
+    if previews[key]:
+        p = previews[key]; pr = p.get_rect(topleft=(dx, yy + px(25)))
+        screen.blit(p, pr); pygame.draw.rect(screen, ACCENT, pr.inflate(px(6), px(6)), width=px(3), border_radius=px(6))
+        yy = pr.bottom
+    if msg:
+        text(msg, 28, ACCENT_LT, (dx, yy + px(30)))
+    x = px(80)
+    for b, l in (('A', 'Choose'), ('B', 'Back')):
+        r = pygame.Rect(x, H - px(75), px(46), px(46)); pill(r); text(b, 24, TEXT, r.center, 'center')
+        x = text(l, 26, DIM, (r.right + px(12), r.centery), 'midleft').right + px(40)
+    pygame.display.flip(); clock.tick(60)
+    if os.environ.get('BEZEL_SHOT'):                 # testing: save one frame and stop
+        pygame.image.save(screen, os.environ['BEZEL_SHOT']); sys.exit(0)

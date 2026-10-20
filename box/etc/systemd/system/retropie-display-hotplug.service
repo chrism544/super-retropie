@@ -1,0 +1,7 @@
+[Unit]
+Description=Move the picture to the connected display output
+[Service]
+Type=oneshot
+User=pi
+ExecStartPre=/bin/sleep 2
+ExecStart=/usr/local/bin/retropie-display-mode

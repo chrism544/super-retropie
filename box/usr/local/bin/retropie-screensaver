@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Screensaver: EmulationStation's screensaver settings, plus downloading
+game videos for the video screensaver (Skyscraper, in the background)."""
+import os, re, subprocess, sys
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+
+CFG = os.path.expanduser('~/.emulationstation/es_settings.cfg')
+s = open(CFG).read()
+def get(k, d):
+    m = re.search(r'name="' + k + r'" value="([^"]*)"', s)
+    return m.group(1) if m else d
+
+rows = [
+    {'label': 'Style', 'key': ('ScreenSaverBehavior', 'string'), 'value': get('ScreenSaverBehavior', 'dim'),
+     'choices': [('dim', 'Dim the screen'), ('black', 'Black screen'), ('slideshow', 'Game pictures'), ('random video', 'Game videos')],
+     'desc': 'Game pictures shows screenshots of your games; game videos plays short clips (needs videos - see below). '
+             'Press any button to wake it. While it runs, A starts the game on screen.'},
+    {'label': 'Start after', 'key': ('ScreenSaverTime', 'int'), 'value': get('ScreenSaverTime', '300000'),
+     'choices': [('60000', '1 minute'), ('180000', '3 minutes'), ('300000', '5 minutes'), ('600000', '10 minutes'),
+                 ('900000', '15 minutes'), ('1800000', '30 minutes'), ('0', 'Never')],
+     'desc': 'How long the menu sits untouched before the screensaver starts.'},
+    {'label': 'Change every', 'key': ('ScreenSaverSwapMediaTimeout', 'int'), 'value': get('ScreenSaverSwapMediaTimeout', '10000'),
+     'choices': [('5000', '5 seconds'), ('10000', '10 seconds'), ('20000', '20 seconds'), ('30000', '30 seconds')],
+     'desc': 'How long each game picture stays on screen (videos change every 30 seconds).'},
+    {'label': 'Show game name', 'key': ('ScreenSaverGameInfo', 'string'), 'value': get('ScreenSaverGameInfo', 'never'),
+     'choices': [('never', 'Never'), ('start & end', 'Briefly'), ('always', 'Always')],
+     'desc': 'Shows the game and console name over the pictures or videos.'},
+    {'label': 'Video sound', 'key': ('ScreenSaverVideoMute', 'bool'), 'value': get('ScreenSaverVideoMute', 'false'),
+     'choices': [('false', 'On'), ('true', 'Off')],
+     'desc': 'Plays the sound of the game videos.'},
+]
+
+def videos_status():
+    n = 0
+    for d in os.listdir(os.path.expanduser('~/RetroPie/roms')):
+        v = os.path.expanduser(f'~/RetroPie/roms/{d}/media/videos')
+        if os.path.isdir(v): n += len(os.listdir(v))
+    return n
+
+def get_videos(scope):
+    def act():
+        subprocess.Popen(['sudo', '-n', 'systemd-run', '--unit=retropie-get-videos', '--uid=pi', '--setenv=HOME=/home/pi',
+                          '-p', 'Nice=15', '/usr/local/bin/retropie-get-videos', scope],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return ('Downloading videos for your favourite games in the background. They appear in the screensaver '
+                'the next time EmulationStation reloads after it finishes.' if scope == 'favourites' else
+                'Downloading videos for all your games in the background - this can take a day or more on the free account.')
+    return act
+
+rows[-1]['gap'] = True
+rows += [
+    {'label': 'Get videos: favourites', 'action': get_videos('favourites'),
+     'desc': f'Downloads short gameplay videos for your favourite games. You have {videos_status()} videos so far.'},
+    {'label': 'Get videos: all games', 'action': get_videos('all'),
+     'desc': 'Downloads videos for every game you can see. Uses a lot of time and disk space (several GB).'},
+]
+
+changed = {}
+def on_change(i, v):
+    key, typ = rows[i]['key']
+    changed[key] = f'{typ}:{v}'
+    if key == 'ScreenSaverBehavior' and v == 'random video' and videos_status() == 0:
+        return 'Saved. You have no game videos yet - choose "Get videos" below, until then it shows a black screen.'
+    return 'Saved - applies when you leave this screen'
+
+def preview(i, v):
+    return None
+
+ui.options_screen('SETTINGS', 'Screensaver', rows, on_change, preview)
+if changed:
+    subprocess.run(['/usr/local/bin/retropie-es-set'] + [f'{k}={v}' for k, v in changed.items()])

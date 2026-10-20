@@ -1,0 +1,16 @@
+[Unit]
+Description=One-time RetroPie installation
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/opt/retropie-bootstrap/.done
+
+[Service]
+Type=oneshot
+ExecStart=/opt/retropie-bootstrap/install-retropie.sh
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

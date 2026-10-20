@@ -1,0 +1,87 @@
+# What the nightly Super RetroPie backup copies (rsync filter, paths from / on the box).
+# Saves, settings, game lists + artwork, BIOS, and every Super RetroPie customisation.
+# Not the games themselves (too big; the sources are kept on Proxmox and in the drop folder).
+
+# ---- /home/pi
++ /home/
++ /home/pi/
+- /home/pi/.ssh/
+- /home/pi/.cache/
++ /home/pi/.config/***
++ /home/pi/.local/***
++ /home/pi/.Xresources
++ /home/pi/.bashrc
++ /home/pi/.profile
++ /home/pi/*.py
++ /home/pi/*.sh
++ /home/pi/*.txt
++ /home/pi/zelda-save-backup/***
+- /home/pi/RetroPie-Setup/tmp/
++ /home/pi/RetroPie-Setup/***
++ /home/pi/RetroPie/
++ /home/pi/RetroPie/BIOS/***
++ /home/pi/RetroPie/music/***
++ /home/pi/RetroPie/save-snapshots/***
++ /home/pi/RetroPie/retropiemenu/***
++ /home/pi/RetroPie/retropiemenu-replaced/***
++ /home/pi/RetroPie/searchgames/***
++ /home/pi/RetroPie/splashscreens/***
++ /home/pi/RetroPie/roms/
++ /home/pi/RetroPie/roms/*/
++ /home/pi/RetroPie/roms/*/media/***
++ /home/pi/RetroPie/roms/**/
++ /home/pi/RetroPie/roms/**/gamelist.xml
++ /home/pi/RetroPie/roms/**.srm
++ /home/pi/RetroPie/roms/**.sav
++ /home/pi/RetroPie/roms/**.state*
++ /home/pi/RetroPie/roms/**.auto
++ /home/pi/RetroPie/roms/**.mcd
++ /home/pi/RetroPie/roms/**.mcr
++ /home/pi/RetroPie/roms/**.cfg
++ /home/pi/RetroPie/roms/**.sh
+- /home/pi/**
+
+# ---- RetroPie settings and emulator launchers
++ /opt/
++ /opt/retropie/
+- /opt/retropie/configs/all/skyscraper/
+- /opt/retropie/configs/all/retroarch/overlay/
++ /opt/retropie/configs/***
++ /opt/retropie/emulators/
++ /opt/retropie/emulators/*/
++ /opt/retropie/emulators/*/*.sh
++ /opt/retropie/emulators/*/*.py
++ /opt/retropie/emulators/*/*.xml
+- /opt/**
+
+# ---- system customisations
++ /etc/
++ /etc/emulationstation/
++ /etc/emulationstation/themes/
++ /etc/emulationstation/themes/bluray/***
+- /etc/emulationstation/themes/*
++ /etc/emulationstation/***
++ /etc/netplan/***
++ /etc/samba/
++ /etc/samba/smb.conf
++ /etc/udev/
++ /etc/udev/rules.d/***
++ /etc/modules-load.d/***
++ /etc/systemd/
++ /etc/systemd/system/
++ /etc/systemd/system/retropie-*
++ /etc/systemd/system/*.wants/
++ /etc/systemd/system/*.wants/retropie-*
++ /etc/default/
++ /etc/default/grub
++ /etc/cloud/
++ /etc/cloud/cloud.cfg.d/***
++ /etc/hostname
++ /etc/hosts
++ /usr/
++ /usr/local/***
++ /usr/share/
++ /usr/share/plymouth/
++ /usr/share/plymouth/themes/
++ /usr/share/plymouth/themes/super-retropie/***
+- *

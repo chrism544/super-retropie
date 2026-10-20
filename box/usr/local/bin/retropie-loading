@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Loading screen while EmulationStation starts or reloads (started by the Openbox autostart
+loop just before ES). Shows the chosen Super RetroPie picture on top until ES has finished
+loading - its log goes quiet - or 60 seconds."""
+import json, os, subprocess, sys, time
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+try:
+    config = json.load(open(os.path.expanduser('~/.config/retropie-splash.json')))
+    style = config.get('style', 'super')
+except Exception:
+    config = {}
+    style = 'super'
+if style == 'off':
+    sys.exit(0)
+import pygame
+pygame.display.init()
+# Play the full console recording independently so menu loading never cuts it short.
+from pathlib import Path
+try:
+    subprocess.Popen(['/usr/local/bin/retropie-loading-sound'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except OSError:
+    pass
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.NOFRAME)
+pygame.display.set_caption('Super RetroPie loading')
+pygame.mouse.set_visible(False)
+W, H = screen.get_size()
+image_path = Path('/usr/local/share/retropie-splash') / (style + '.png')
+if style not in ('super','consoles','minimal','playstation','n64','gamecube','ps2','ps3','xbox','wii','wiiu','xbox360') or not image_path.is_file():
+    image_path = Path('/usr/local/share/retropie-splash/consoles.png')
+img = pygame.transform.smoothscale(pygame.image.load(str(image_path)).convert(), (W, H))
+LOG = os.path.expanduser('~/.emulationstation/es_log.txt')
+start = time.time()
+time.sleep(0.2)
+wid = subprocess.run(['xdotool', 'search', '--name', '^Super RetroPie loading$'], capture_output=True, text=True).stdout.split()
+last_size, quiet_since = -1, None
+while time.time() - start < 60:
+    for e in pygame.event.get():
+        pass
+    screen.blit(img, (0, 0)); pygame.display.flip()
+    for w in wid:                                     # stay above the EmulationStation window
+        subprocess.run(['xdotool', 'windowraise', w], capture_output=True)
+    try:
+        size = os.path.getsize(LOG) if os.path.getmtime(LOG) > start else -1
+    except OSError:
+        size = -1
+    es_up = subprocess.run(['pgrep', '-x', 'emulationstatio'], capture_output=True).returncode == 0
+    if es_up and size > 0:
+        if size != last_size:
+            last_size, quiet_since = size, time.time()
+        elif time.time() - quiet_since > 1.5:          # log quiet: game lists loaded
+            break
+    time.sleep(0.25)
+pygame.quit()
+# hand the screen back to EmulationStation - otherwise focus can fall back to the xterm behind it
+# and its log text shows instead of the menu
+time.sleep(0.3)
+for w in subprocess.run(['xdotool', 'search', '--class', 'emulationstation'], capture_output=True, text=True).stdout.split():
+    subprocess.run(['xdotool', 'windowactivate', w], capture_output=True)

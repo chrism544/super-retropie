@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly backup of Super RetroPie (saves, settings, artwork, customisations)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/super-retropie-backup/super-retropie-backup.sh
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Kid Mode: EmulationStation UI mode (Full / Kiosk / Kid), the unlock code,
+and automatic kid-friendly game marking."""
+import os, re, subprocess, sys, time
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+
+CFG = os.path.expanduser('~/.emulationstation/es_settings.cfg')
+s = open(CFG).read()
+def get(k, d):
+    m = re.search(r'name="' + k + r'" value="([^"]*)"', s)
+    return m.group(1) if m else d
+ARROWS = {'u': 'Up', 'd': 'Down', 'l': 'Left', 'r': 'Right', 'a': 'A', 'b': 'B', 'x': 'X', 'y': 'Y'}   # theme font has no arrow glyphs
+code = get('UIMode_passkey', 'uuddlrlrba')
+pretty = lambda c: ', '.join(ARROWS.get(ch, ch) for ch in c)
+kid_count = subprocess.run(['python3', '/usr/local/bin/retropie-kidtag', 'count'], capture_output=True, text=True).stdout.strip()
+marked = sum(open(g).read().count('<kidgame>true') for g in __import__('glob').glob(os.path.expanduser('~/RetroPie/roms/*/gamelist.xml')))
+pending = {'settings': {}, 'tag': None}
+
+def record_code():
+    """Capture a new 10-step unlock code from the controller."""
+    inp = ui.Input(); seq = ''
+    while len(seq) < 10:
+        for a in inp.read():
+            m = {'up': 'u', 'down': 'd', 'left': 'l', 'right': 'r', 'a': 'a', 'b': 'b', 'x': 'x', 'y': 'y'}.get(a)
+            if m: seq += m
+        ui.background(); ui.header('KID MODE', 'New unlock code', 'Press 10 buttons or directions - D-pad, A, B, X, Y')
+        ui.text(pretty(seq) + ('  _' if len(seq) < 10 else ''), 44, ui.ACCENT_LT, (ui.W // 2, ui.H // 2), 'center')
+        ui.text(f'{len(seq)} / 10', 30, ui.DIM, (ui.W // 2, ui.H // 2 + ui.px(90)), 'center')
+        pygame.display.flip(); pygame.time.wait(20)
+    global code
+    code = seq; pending['settings']['UIMode_passkey'] = f'string:{seq}'
+    rows[1]['desc'] = desc_code()
+    return f'New unlock code: {pretty(seq)} - write it down!'
+
+def desc_code():
+    return (f'Current code:  {pretty(code)}\nIn Kiosk or Kid mode, enter this on the controller at the main screen '
+            'to unlock everything again. Choose to record a new one.')
+
+def mark():
+    pending['tag'] = 'set'
+    return f'{kid_count} games will be marked kid-friendly when you leave this screen.'
+def clear():
+    pending['tag'] = 'clear'
+    return 'All kid-friendly marks will be removed when you leave this screen.'
+
+rows = [
+    {'label': 'Mode', 'value': get('UIMode', 'Full'),
+     'choices': [('Full', 'Full - everything'), ('Kiosk', 'Kiosk - play only'), ('Kid', 'Kid - kid games only')],
+     'desc': 'Full: everything, as now.\nKiosk: guests can play any game but cannot change EmulationStation settings '
+             'or edit and delete games.\nKid: only games marked kid-friendly are shown, no settings.\n'
+             'Unlock with the code below.'},
+    {'label': 'Unlock code', 'action': record_code, 'desc': desc_code()},
+    {'label': 'Mark kid-friendly games', 'action': mark, 'gap': True,
+     'desc': f'Marks games as kid-friendly from their genre - platform, puzzle, racing, sports, party, educational - '
+             f'and leaves out shooting, fighting, gambling and horror. That is {kid_count} of your games '
+             f'({marked} marked now). You can also mark single games in EmulationStation: Select on a game > Edit this game\'s metadata > Kidgame.'},
+    {'label': 'Clear kid-friendly marks', 'action': clear, 'desc': 'Removes the kid-friendly mark from every game.'},
+]
+
+def on_change(i, v):
+    pending['settings']['UIMode'] = f'string:{v}'
+    if v != 'Full':
+        return f'Saved. After you leave this screen it switches to {v} mode - unlock code: {pretty(code)}'
+    return 'Saved - applies when you leave this screen'
+
+ui.options_screen('SETTINGS', 'Kid Mode', rows, on_change)
+if pending['settings'] or pending['tag']:
+    args = ['/usr/local/bin/retropie-es-set'] + [f'{k}={v}' for k, v in pending['settings'].items()]
+    if pending['tag']:
+        args.append(f"--exec=python3 /usr/local/bin/retropie-kidtag {pending['tag']}")
+    subprocess.run(args)

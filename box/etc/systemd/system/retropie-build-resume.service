@@ -1,0 +1,8 @@
+[Unit]
+Description=Resume paused RetroPie builds when no game is running
+[Service]
+ExecStart=/usr/local/bin/retropie-build-resume-watchdog
+Restart=always
+Nice=10
+[Install]
+WantedBy=multi-user.target

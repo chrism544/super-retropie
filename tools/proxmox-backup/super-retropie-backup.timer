@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly backup of Super RetroPie
+
+[Timer]
+OnCalendar=*-*-* 03:30
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

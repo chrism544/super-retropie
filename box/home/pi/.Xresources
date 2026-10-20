@@ -1,0 +1,9 @@
+! xterm (EmulationStation and its text menus) - theme colours instead of default primaries
+XTerm*color4:  #116a9d
+XTerm*color12: #40aae6
+XTerm*color6:  #40aae6
+XTerm*color14: #7cc4ef
+XTerm*color7:  #c8d2dc
+XTerm*color15: #f7f7f7
+XTerm*background: black
+XTerm*foreground: #f7f7f7

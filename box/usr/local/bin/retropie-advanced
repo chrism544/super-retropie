@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Game Settings > Advanced: the less-used tools in one place (taken off the main RetroPie menu).
+Exits with the chosen item's code; configedit.sh runs it and comes back here. B (exit 0) = back.
+"""
+import sys
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+
+ITEMS = [   # (exit code, label, description)
+    (11, 'Game launch logs', "What happened each time a game was started - read these when a game won't start or closes "
+                             "straight away (error messages no longer flash up on screen)."),
+    (12, 'Network', 'Connection status, IP address, DHCP or fixed address, live traffic and a speed test.'),
+    (13, 'Performance', 'Processor power mode (Cool, Standard or Performance), temperature and fan, Xbox emulator updates.'),
+    (14, 'RetroPie Netplay', "RetroArch online play: host or join, port, the other player's address, delay frames, nickname."),
+    (15, 'RetroPie Setup', "RetroPie's own setup: install or update emulators, drivers and RetroPie itself (text menus)."),
+    (10, 'All RetroArch settings', "RetroPie's full configuration editor (text menus) for every setting not in Game Settings."),
+]
+chosen = [0]
+def pick(code):
+    def f():
+        chosen[0] = code
+        return 'EXIT'
+    return f
+rows = [{'label': label, 'action': pick(code), 'desc': desc} for code, label, desc in ITEMS]
+ui.options_screen('SETTINGS', 'Advanced', rows, sub='Logs, network, performance and RetroPie setup')
+sys.exit(chosen[0])

@@ -1,0 +1,16 @@
+#!/bin/bash
+# Put the picture on whichever output has a screen: 1080p60 if that screen offers it (lighter
+# for games than 4K), otherwise its preferred mode. Outputs without a screen are switched off.
+# Runs at X start, after every game (runcommand-onend) and on cable plug/move
+# (udev -> retropie-display-hotplug.service).
+export DISPLAY=${DISPLAY:-:0} XAUTHORITY=${XAUTHORITY:-/home/pi/.Xauthority}
+x=$(xrandr 2>/dev/null) || exit 0
+out=$(awk "/ connected/{print \$1; exit}" <<<"$x")
+[ -n "$out" ] || exit 0           # TV switched off: leave everything as it is
+modes=$(awk -v o="$out" "\$1==o{f=1;next} /^[^ ]/{f=0} f{print \$1}" <<<"$x")
+if grep -qx 1920x1080 <<<"$modes"; then
+    xrandr --output "$out" --primary --mode 1920x1080 --rate 60 2>/dev/null || xrandr --output "$out" --primary --auto
+else
+    xrandr --output "$out" --primary --auto
+fi
+for o in $(awk "/ disconnected [0-9]+x[0-9]+\+/{print \$1}" <<<"$x"); do xrandr --output "$o" --off; done

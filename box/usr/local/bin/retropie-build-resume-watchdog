@@ -1,0 +1,7 @@
+#!/bin/bash
+while true; do
+  if ! retropie-game-running; then
+    ps -eo pid=,stat=,args= | awk '$2 ~ /^T/ && /[R]etroPie-Setup\/tmp\/build/ {print $1}' | xargs -r kill -CONT
+  fi
+  sleep 15
+done

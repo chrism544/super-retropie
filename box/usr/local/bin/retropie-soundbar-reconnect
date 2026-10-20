@@ -1,0 +1,22 @@
+#!/bin/bash
+# Keep the Bluetooth soundbar connected: after boot, after it is switched off and on,
+# or after it drops out. Paging a device that is off costs a few seconds of radio time,
+# so try every 30 s, and only every 2 min after 10 failed tries in a row.
+# PulseAudio's module-switch-on-connect moves the sound to it once it connects.
+MAC=${1:-C4:30:18:1B:B3:50}   # Yamaha YAS-105
+fails=0
+while true; do
+    if bluetoothctl info "$MAC" 2>/dev/null | grep -q "Connected: yes"; then
+        fails=0
+    elif bluetoothctl show 2>/dev/null | grep -q "Powered: yes"; then
+        if timeout 15 bluetoothctl connect "$MAC" 2>/dev/null | grep -q "Connection successful"; then
+            echo "soundbar connected"; fails=0
+        else
+            fails=$((fails + 1))
+        fi
+    fi
+    # straight after start-up try every 5 s for 3 minutes (the soundbar is often ready before
+    # PulseAudio has registered its audio profiles), then every 30 s, every 2 min after 10 misses
+    up=$(cut -d. -f1 /proc/uptime)
+    if [ $up -lt 180 ]; then sleep 5; elif [ $fails -ge 10 ]; then sleep 120; else sleep 30; fi
+done

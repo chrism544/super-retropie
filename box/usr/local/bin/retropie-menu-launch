@@ -1,0 +1,16 @@
+#!/bin/bash
+# EmulationStation "retropie" system launcher. The themed menu screens (pygame) start
+# directly - no RetroPie-Setup start-up text on screen, no joy2key doubling the pad as keys.
+# Everything else (RetroPie Setup, Netplay, Run Command, RetroArch...) goes through RetroPie's
+# own launcher as before.
+f="$1"
+case "$(basename "$f")" in
+    gameartwork.sh|showip.sh|esthemes.sh|bluetooth.sh|configedit.sh|bootscreen.sh|screensaver.sh|kidmode.sh|savemanager.sh|music.sh|playstats.sh|gamehelp.sh|performance.sh)
+        printf '\033[2J\033[H\033[?25l'          # clear the terminal, hide the cursor
+        bash "$f"
+        rc=$?
+        printf '\033[2J\033[H\033[?25h'
+        exit $rc ;;
+    *)
+        exec sudo /home/pi/RetroPie-Setup/retropie_packages.sh retropiemenu launch "$f" ;;
+esac

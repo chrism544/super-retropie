@@ -1,0 +1,9 @@
+#!/bin/sh
+# Closes the Super RetroPie launch screen: the daemon's current one (PID file) and any started by
+# runcommand through feh. Used by runcommand-onlaunch/onend, retropie-launchscreen-handoff and the
+# EmulationStation game-end script.
+p=$(cat /tmp/retropie-launchscreen.pid 2>/dev/null)
+[ -n "$p" ] && grep -q retropie-launchscreen /proc/$p/cmdline 2>/dev/null && kill "$p"
+rm -f /tmp/retropie-launchscreen.pid
+pkill -f "^python3 /usr/local/bin/retropie-launchscreen -F" 2>/dev/null
+exit 0

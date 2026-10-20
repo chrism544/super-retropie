@@ -1,0 +1,90 @@
+#!/bin/bash
+# Super RetroPie safe update (monthly timer, or by hand:  sudo retropie-safe-update [--check-only])
+#  1. wait until nobody is playing
+#  2. snapshot /opt/retropie, EmulationStation settings and the Super RetroPie customisations
+#  3. update: RetroPie-Setup script, every installed RetroPie package, Ubuntu packages
+#  4. put the Super RetroPie customisations back (RetroPie updates overwrite some of them)
+#  5. test each emulator loads a game; if anything that worked before now fails -> roll back
+# Report: /home/pi/update-report.txt
+set -u
+U=pi; H=/home/pi
+SNAP=$H/update-snapshots/$(date +%F)
+REPORT=$H/update-report.txt
+KEEP=/usr/local/share/super-retropie/keep        # copies of customised files RetroPie updates replace
+log() { echo "$(date '+%F %T') $*" | tee -a $REPORT; }
+
+smoke() {   # one line per emulator: OK / FAIL
+    local RA=/opt/retropie/emulators/retroarch/bin/retroarch C=/opt/retropie/libretrocores
+    printf 'video_driver = "null"\naudio_driver = "null"\ninput_driver = "null"\nsavestate_auto_load = "false"\nsavestate_auto_save = "false"\n' > /tmp/smoke.cfg
+    while IFS='|' read -r name core rom; do
+        [ -f "$rom" ] || { echo "$name SKIP"; continue; }
+        out=$(timeout 60 sudo -u $U $RA -v --max-frames=120 -L "$C/$core" --config /opt/retropie/configs/all/retroarch.cfg --appendconfig /tmp/smoke.cfg "$rom" 2>&1)
+        if grep -qiE "Failed to load content|Required files are missing|Could not load|Could not read content|core does not support|Failed to open libretro core" <<<"$out"; then echo "$name FAIL"; else echo "$name OK"; fi
+    done <<EOF
+snes|lr-snes9x/snes9x_libretro.so|$H/RetroPie/roms/snes/USA/Super Mario World (U) [!].smc
+megadrive|lr-genesis-plus-gx/genesis_plus_gx_libretro.so|$H/RetroPie/roms/megadrive/P - S/Sonic the Hedgehog (JUE) [!].zip
+arcade-mame|lr-mame/mamearcade_libretro.so|$H/RetroPie/roms/arcade/dkong.7z
+arcade-fbneo|lr-fbneo/fbneo_libretro.so|$H/RetroPie/roms/arcade/sf2.7z
+psx|lr-pcsx-rearmed/pcsx_rearmed_libretro.so|$H/RetroPie/roms/psx/Tekken 3 (USA).cue
+n64|lr-mupen64plus/mupen64plus_libretro.so|$H/RetroPie/roms/n64/Mario Kart 64 (U) [!].z64
+nds|lr-melondsds/melondsds_libretro.so|$(ls $H/RetroPie/roms/nds/*New\ Super\ Mario* 2>/dev/null | head -1)
+EOF
+    for app in pcsx2-appimage cemu-appimage; do
+        [ -x /opt/retropie/emulators/$app/app/AppRun ] && echo "$app OK" || echo "$app FAIL"
+    done
+    [ -x /opt/retropie/supplementary/emulationstation/emulationstation ] && echo "emulationstation OK" || echo "emulationstation FAIL"
+}
+
+reapply() {   # Super RetroPie customisations that RetroPie updates can undo
+    # themed menu entries: RetroPie's own versions come back as .rp files - move them aside again
+    for f in showip configedit bluetooth esthemes filemanager; do
+        [ -e $H/RetroPie/retropiemenu/$f.rp ] && [ -e $H/RetroPie/retropiemenu/$f.sh ] && \
+            mv -f $H/RetroPie/retropiemenu/$f.rp $H/RetroPie/retropiemenu-replaced/
+    done
+    # menu items start directly (no RetroPie-Setup start-up text)
+    sed -i 's|<command>sudo /home/pi/RetroPie-Setup/retropie_packages.sh retropiemenu launch %ROM% *</command>|<command>/usr/local/bin/retropie-menu-launch %ROM%</command>|' /etc/emulationstation/es_systems.cfg
+    # Wii U launcher / pad helper / tilt server, PCSX2 settings are kept by their modules; restore our copies
+    [ -d $KEEP ] && cp -a $KEEP/. / 2>/dev/null
+    # Dolphin needs its data folder
+    [ -d $H/RetroPie/BIOS/dolphin-emu/Sys ] || log "WARNING: Dolphin data folder missing"
+}
+
+[ "${1:-}" = --check-only ] && { smoke; exit; }
+[ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+: > $REPORT
+while retropie-game-running; do sleep 120; done
+log "safe update started"
+before=$(smoke); log "before:"; echo "$before" >> $REPORT
+
+log "snapshot -> $SNAP"
+mkdir -p $SNAP
+prev=$(ls -d $H/update-snapshots/*/ 2>/dev/null | grep -v "$SNAP" | tail -1)
+rsync -a --delete ${prev:+--link-dest=${prev}opt} /opt/retropie/ $SNAP/opt/
+rsync -a /etc/emulationstation/ $SNAP/etc-emulationstation/
+rsync -a $H/.emulationstation/ $SNAP/home-emulationstation/ --exclude 'downloaded_*'
+rsync -a $H/RetroPie-Setup/ $SNAP/RetroPie-Setup/ --exclude tmp
+ls -d $H/update-snapshots/*/ | head -n -2 | xargs -r rm -rf          # keep the newest 2
+
+log "updating RetroPie-Setup"
+sudo -u $U git -C $H/RetroPie-Setup pull --ff-only >>$REPORT 2>&1 || log "RetroPie-Setup pull failed"
+log "updating RetroPie packages"
+$H/RetroPie-Setup/retropie_packages.sh setup update_packages >>$REPORT 2>&1 || log "package update reported errors"
+log "updating Ubuntu packages"
+DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -y -qq upgrade >>$REPORT 2>&1
+reapply
+
+after=$(smoke); log "after:"; echo "$after" >> $REPORT
+broken=$(diff <(echo "$before" | grep OK$ | cut -d' ' -f1) <(echo "$after" | grep OK$ | cut -d' ' -f1) | grep '^<' | cut -c3-)
+if [ -n "$broken" ]; then
+    log "BROKEN after update: $broken - rolling back"
+    rsync -a --delete $SNAP/opt/ /opt/retropie/
+    rsync -a $SNAP/etc-emulationstation/ /etc/emulationstation/
+    rsync -a --delete $SNAP/RetroPie-Setup/ $H/RetroPie-Setup/ --exclude tmp
+    reapply
+    log "rolled back: $(smoke | tr '\n' ' ')"
+    echo "rolled back" > $H/update-result
+else
+    log "update OK"
+    echo "ok" > $H/update-result
+fi
+chown $U:$U $REPORT $H/update-result

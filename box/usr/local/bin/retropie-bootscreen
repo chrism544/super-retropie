@@ -1,0 +1,61 @@
+#!/bin/bash
+# Apply the Super RetroPie boot / loading screen.   retropie-bootscreen <super|consoles|minimal|off>
+# Boot: Plymouth "super-retropie" script theme (image rebuilt into the initramfs) + quiet kernel.
+# Loading: /usr/local/bin/retropie-loading shows the same picture while EmulationStation loads.
+set -e
+style=${1:-super}
+SRC=/usr/local/share/retropie-splash
+TH=/usr/share/plymouth/themes/super-retropie
+case "$style" in
+    super|consoles|minimal|playstation|n64|gamecube|ps2|ps3|xbox|wii|wiiu|xbox360|off) ;;
+    *) echo "Unknown boot picture: $style" >&2; exit 2 ;;
+esac
+[ "$style" = off ] || [ -f "$SRC/$style.png" ] || exit 2
+exec 9>/run/retropie-bootscreen.lock
+flock 9
+python3 - "$style" <<'PY'
+import json, sys, os
+from pathlib import Path
+p = Path('/home/pi/.config/retropie-splash.json')
+try: settings = json.loads(p.read_text())
+except (OSError, ValueError): settings = {}
+settings['style'] = sys.argv[1]
+t = p.with_suffix('.tmp'); t.write_text(json.dumps(settings)+'\n'); os.chown(t,1000,1000); t.replace(p)
+PY
+
+mkdir -p $TH
+if [ "$style" != off ]; then
+    cp "$SRC/$style.png" $TH/splash.png
+    cat > $TH/super-retropie.plymouth <<EOF
+[Plymouth Theme]
+Name=Super RetroPie
+Description=Super RetroPie boot screen
+ModuleName=script
+
+[script]
+ImageDir=$TH
+ScriptFile=$TH/super-retropie.script
+EOF
+    cat > $TH/super-retropie.script <<'EOF'
+img = Image("splash.png");
+w = Window.GetWidth(); h = Window.GetHeight();
+s = Sprite(img.Scale(w, h)); s.SetX(0); s.SetY(0); s.SetZ(0);
+# small pulsing dot under the picture while it boots
+dot = Image("dot.png");
+d = Sprite(dot); d.SetX(w / 2 - dot.GetWidth() / 2); d.SetY(h * 0.93);
+t = 0;
+fun refresh() { t++; d.SetOpacity(0.35 + 0.65 * Math.Abs(Math.Sin(t / 20))); }
+Plymouth.SetRefreshFunction(refresh);
+EOF
+    python3 -c "from PIL import Image, ImageDraw; im = Image.new('RGBA', (24, 24)); ImageDraw.Draw(im).ellipse([0, 0, 23, 23], fill=(64, 170, 230, 255)); im.save('$TH/dot.png')"
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth $TH/super-retropie.plymouth 200 >/dev/null
+    update-alternatives --set default.plymouth $TH/super-retropie.plymouth >/dev/null
+    sed -i -E 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 vt.global_cursor_default=0"/' /etc/default/grub
+else
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/text/text.plymouth 10 >/dev/null
+    update-alternatives --set default.plymouth /usr/share/plymouth/themes/text/text.plymouth >/dev/null
+    sed -i -E 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=""/' /etc/default/grub
+fi
+update-grub >/dev/null 2>&1
+update-initramfs -u -k all >/dev/null 2>&1
+echo "boot screen: $style"

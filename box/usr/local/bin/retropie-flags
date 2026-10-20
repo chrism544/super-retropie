@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Save / restore the favourite, hidden and kid-game flags of a gamelist around a rewrite
+(Skyscraper generate, tidy-ups).   retropie-flags save|restore <gamelist.xml> <file.json>"""
+import json, os, sys, xml.etree.ElementTree as ET
+
+FLAGS = ('favorite', 'hidden', 'kidgame')
+mode, gl, store = sys.argv[1:4]
+base = os.path.dirname(gl) + '/'
+def key(p):
+    return p[len(base):] if p.startswith(base) else p[2:] if p.startswith('./') else p
+
+tree = ET.parse(gl); root = tree.getroot()
+if mode == 'save':
+    data = {key(g.findtext('path') or ''): {f: g.findtext(f) for f in FLAGS if g.findtext(f)} for g in root.iter('game')}
+    json.dump({k: v for k, v in data.items() if v}, open(store, 'w'))
+else:
+    data = json.load(open(store))
+    for g in root.iter('game'):
+        for f, v in data.get(key(g.findtext('path') or ''), {}).items():
+            e = g.find(f)
+            if e is None:
+                e = ET.SubElement(g, f)
+            e.text = v
+    tree.write(gl, encoding='utf-8', xml_declaration=True)

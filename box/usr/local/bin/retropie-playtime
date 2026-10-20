@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Super RetroPie play-time stats.
+
+  retropie-playtime start <system> <rom>   runcommand-onstart: remember the session start
+  retropie-playtime end                    runcommand-onend: log the finished session
+  retropie-playtime                        Play Stats screen
+
+Sessions: ~/.local/share/retropie-playtime.jsonl  {"system","rom","name","start","end"}
+Sessions under 20 seconds (a game that would not start, a quick look) are not counted.
+Games that close within a minute are also logged to ~/.local/share/retropie-quick-exits.jsonl with the
+end of the launch log - the Problems page lists them (last 7 days) with the overnight game check results.
+"""
+import collections, json, os, sys, time, xml.etree.ElementTree as ET
+
+LOG = os.path.expanduser('~/.local/share/retropie-playtime.jsonl')
+CUR = '/tmp/retropie-playtime-current.json'
+QUICK = os.path.expanduser('~/.local/share/retropie-quick-exits.jsonl')
+CHECK = os.path.expanduser('~/night-check/results.json')
+ROMS = os.path.expanduser('~/RetroPie/roms')
+
+def game_name(system, rom):
+    base = f'{ROMS}/{system}/'
+    try:
+        for g in ET.parse(base + 'gamelist.xml').getroot().iter('game'):
+            p = g.findtext('path') or ''
+            if os.path.normpath(base + p[2:] if p.startswith('./') else p) == os.path.normpath(rom):
+                return g.findtext('name')
+    except Exception:
+        pass
+    return os.path.splitext(os.path.basename(rom))[0]
+
+if len(sys.argv) > 1 and sys.argv[1] == 'start':
+    json.dump({'system': sys.argv[2], 'rom': sys.argv[3], 'start': time.time()}, open(CUR, 'w')); sys.exit(0)
+if len(sys.argv) > 1 and sys.argv[1] == 'end':
+    try:
+        s = json.load(open(CUR)); os.remove(CUR)
+    except Exception:
+        sys.exit(0)
+    s['end'] = time.time()
+    if s['end'] - s['start'] < 60:
+        try:
+            log = open('/dev/shm/runcommand.log', errors='replace').read().splitlines()[-12:]
+        except OSError:
+            log = []
+        q = dict(s, name=game_name(s['system'], s['rom']), log=log)
+        os.makedirs(os.path.dirname(QUICK), exist_ok=True)
+        open(QUICK, 'a').write(json.dumps(q) + '\n')
+    if s['end'] - s['start'] >= 20:
+        s['name'] = game_name(s['system'], s['rom'])
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        open(LOG, 'a').write(json.dumps(s) + '\n')
+    sys.exit(0)
+
+# ------------------------------------------------------------------ Play Stats screen
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+NAMES = {'arcade': 'Arcade', 'snes': 'SNES', 'nes': 'NES', 'megadrive': 'Mega Drive', 'n64': 'Nintendo 64', 'psx': 'PlayStation',
+         'ps2': 'PlayStation 2', 'psp': 'PSP', 'gc': 'GameCube', 'wii': 'Wii', 'wiiu': 'Wii U', 'nds': 'Nintendo DS',
+         'dreamcast': 'Dreamcast', 'gba': 'Game Boy Advance', 'xbox': 'Xbox'}
+sessions = []
+try:
+    sessions = [json.loads(l) for l in open(LOG) if l.strip()]
+except OSError:
+    pass
+hrs = lambda s: f'{int(s // 3600)} h {int(s % 3600 // 60):02d} m' if s >= 3600 else f'{int(s // 60)} min'
+total = sum(s['end'] - s['start'] for s in sessions)
+by_game = collections.Counter(); by_sys = collections.Counter(); names = {}
+for s in sessions:
+    k = (s['system'], s['rom']); by_game[k] += s['end'] - s['start']; by_sys[s['system']] += s['end'] - s['start']
+    names[k] = s.get('name') or os.path.basename(s['rom'])
+days = sorted({time.strftime('%Y-%m-%d', time.localtime(s['start'])) for s in sessions}, reverse=True)
+streak = 0
+d = time.time()
+while time.strftime('%Y-%m-%d', time.localtime(d)) in days:
+    streak += 1; d -= 86400
+week = sum(s['end'] - s['start'] for s in sessions if s['start'] > time.time() - 7 * 86400)
+
+inp = ui.Input(); page = 0
+PAGES = ['Overview', 'Top games', 'Consoles', 'Recent', 'Problems']
+quick = collections.OrderedDict()
+try:
+    for l in open(QUICK):
+        q = json.loads(l)
+        if q['start'] > time.time() - 7 * 86400:
+            k = (q['system'], q['rom'])
+            n, last = quick.get(k, (0, None))
+            quick[k] = (n + 1, q)
+except (OSError, ValueError):
+    pass
+# a game played properly since its quick exits is fine again
+quick = [(k, n, q) for k, (n, q) in quick.items()
+         if not any(s['system'] == k[0] and s['rom'] == k[1] and s['start'] > q['end'] and s['end'] - s['start'] >= 60
+                    for s in sessions)]
+quick.sort(key=lambda x: -x[2]['start'])
+try:
+    check = json.load(open(CHECK))
+except (OSError, ValueError):
+    check = None
+clock = pygame.time.Clock()
+while True:
+    for a in inp.read():
+        if a == 'b': sys.exit(0)
+        if a in ('right', 'rb'): page = (page + 1) % len(PAGES)
+        if a in ('left', 'lb'): page = (page - 1) % len(PAGES)
+    ui.background(); ui.header('SUPER RETROPIE', 'Play Stats', '   '.join(('[ ' + p + ' ]') if i == page else p for i, p in enumerate(PAGES)))
+    y = ui.px(240)
+    if not sessions:
+        ui.text('No games played since stats started - play something and come back!', 34, ui.DIM, (ui.px(80), y))
+    elif page == 0:
+        for label, val in (('Total play time', hrs(total)), ('This week', hrs(week)), ('Games played', str(len(by_game))),
+                           ('Sessions', str(len(sessions))), ('Day streak', f'{streak} day{"s" * (streak != 1)}'),
+                           ('Favourite console', NAMES.get(by_sys.most_common(1)[0][0], by_sys.most_common(1)[0][0])),
+                           ('Most played', names[by_game.most_common(1)[0][0]])):
+            ui.text(label, 32, ui.DIM, (ui.px(80), y)); ui.text(val, 40, ui.TEXT, (ui.px(560), y - ui.px(6)), maxw=ui.W - ui.px(640)); y += ui.px(84)
+    elif page in (1, 2):
+        items = by_game.most_common(10) if page == 1 else by_sys.most_common(10)
+        top = items[0][1] if items else 1
+        for k, secs in items:
+            label = names[k] if page == 1 else NAMES.get(k, k)
+            ui.text(label, 30, ui.TEXT, (ui.px(80), y), maxw=ui.px(700))
+            bar = pygame.Rect(ui.px(820), y + ui.px(6), int(ui.px(760) * secs / top), ui.px(30)); ui.pill(bar)
+            ui.text(hrs(secs), 26, ui.ACCENT_LT, (ui.W - ui.px(80), y + ui.px(4)), 'topright'); y += ui.px(70)
+    elif page == 4:
+        ui.text('Games that closed within a minute (last 7 days)', 28, ui.ACCENT_LT, (ui.px(80), y)); y += ui.px(54)
+        if not quick:
+            ui.text('None - every game you started kept running.', 30, ui.DIM, (ui.px(80), y)); y += ui.px(60)
+        for k, n, q in quick[:5]:
+            ui.text(q.get('name') or os.path.basename(k[1]), 30, ui.TEXT, (ui.px(80), y), maxw=ui.px(900))
+            ui.text(NAMES.get(k[0], k[0]), 26, ui.DIM, (ui.px(1020), y + ui.px(4)))
+            ui.text(f'{n}x, last {time.strftime("%a %H:%M", time.localtime(q["start"]))}', 26, ui.BAD, (ui.W - ui.px(80), y + ui.px(4)), 'topright')
+            y += ui.px(58)
+        y += ui.px(30)
+        if check:
+            ui.text('Overnight game check  -  ' + check.get('when', ''), 28, ui.ACCENT_LT, (ui.px(80), y)); y += ui.px(54)
+            for r in check.get('games', [])[:12 - min(len(quick), 5)]:
+                ok = r.get('ok')
+                ui.text(r['name'], 28, ui.TEXT, (ui.px(80), y), maxw=ui.px(1000))
+                ui.text(r.get('note', 'OK' if ok else 'problem'), 26, ui.GOOD if ok else ui.BAD, (ui.W - ui.px(80), y + ui.px(2)), 'topright', maxw=ui.px(700))
+                y += ui.px(50)
+    else:
+        for s in sorted(sessions, key=lambda s: -s['start'])[:11]:
+            ui.text(time.strftime('%a %d %b  %H:%M', time.localtime(s['start'])), 26, ui.DIM, (ui.px(80), y + ui.px(4)))
+            ui.text(s.get('name') or '', 30, ui.TEXT, (ui.px(420), y), maxw=ui.px(1000))
+            ui.text(hrs(s['end'] - s['start']), 26, ui.ACCENT_LT, (ui.W - ui.px(80), y + ui.px(4)), 'topright'); y += ui.px(64)
+    ui.hints([('D-PAD', 'Pages'), ('B', 'Back')])
+    pygame.display.flip()
+    if ui.SHOT: pygame.image.save(ui.screen, ui.SHOT); sys.exit(0)
+    clock.tick(30)

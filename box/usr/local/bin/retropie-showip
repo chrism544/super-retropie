@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""RetroPie menu > Show IP, in the EmulationStation (bluray) theme.
+Network address, internet, file shares, Tailscale and Bluetooth devices. Any button closes."""
+import os, re, socket, subprocess, sys, time
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL, GOOD, BAD = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32), (90, 200, 120), (230, 110, 110)
+
+def run(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=4).stdout
+    except Exception:
+        return ''
+
+def info():
+    rows = []
+    addrs = run('ip', '-4', '-o', 'addr', 'show', 'scope', 'global')
+    lan = [(m.group(1), m.group(2)) for m in re.finditer(r'^\d+:\s+(\S+)\s+inet\s+([\d.]+)', addrs, re.M)]
+    eth = [(i, a) for i, a in lan if not i.startswith(('tailscale', 'docker', 'lo'))]
+    ts = [a for i, a in lan if i.startswith('tailscale')]
+    ip = eth[0][1] if eth else None
+    kind = ('Wired' if eth and eth[0][0].startswith('en') else 'Wi-Fi') if eth else ''
+    rows.append(('IP address', ip or 'Not connected', ACCENT_LT if ip else BAD, f'{kind} ({eth[0][0]})' if eth else ''))
+    pretty = run('hostnamectl', '--pretty').strip() or socket.gethostname()
+    rows.append(('Name', pretty, TEXT, f'{socket.gethostname()}.local'))
+    try:
+        socket.create_connection(('1.1.1.1', 53), timeout=3).close()
+        online = True
+    except OSError:
+        online = False
+    rows.append(('Internet', 'Online' if online else 'Offline', GOOD if online else BAD, ''))
+    if ip:
+        rows.append(('File shares', f'\\\\{ip}\\roms', TEXT, 'also  \\bios  and  \\drop'))
+    if ts:
+        rows.append(('Tailscale', ts[0], TEXT, 'remote access'))
+    if subprocess.run(['pgrep', '-x', 'sunshine'], capture_output=True).returncode == 0:
+        rows.append(('Streaming', 'Moonlight: Super RetroPie', TEXT, f'set up at https://{ip}:47990' if ip else ''))
+    devs = []
+    for line in run('bluetoothctl', 'devices', 'Connected').splitlines():
+        p = line.split(' ', 2)
+        if len(p) == 3:
+            devs.append(p[2].strip())
+    rows.append(('Bluetooth', ', '.join(devs) if devs else 'Nothing connected', TEXT if devs else DIM, ''))
+    up = float(open('/proc/uptime').read().split()[0])
+    rows.append(('Running for', f'{int(up // 86400)} day{"s" if up >= 172800 else ""} {int(up % 86400 // 3600)} hours' if up >= 86400 else f'{int(up // 3600)} hours {int(up % 3600 // 60)} min', DIM, ''))
+    return rows
+
+pygame.init()
+shot = os.environ.get('SHOWIP_SHOT')
+screen = pygame.display.set_mode((1920, 1080)) if shot else pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size(); S = H / 1080
+px = lambda v: int(v * S)
+fonts = {}
+def font(n):
+    if n not in fonts:
+        fonts[n] = pygame.font.Font(FONT, px(n)) if os.path.exists(FONT) else pygame.font.SysFont('dejavusans', px(n))
+    return fonts[n]
+def text(t, n, c, pos, anchor='topleft'):
+    s = font(n).render(t, True, c); r = s.get_rect(**{anchor: pos}); screen.blit(s, r); return r
+def pill(r, c=ACCENT):
+    pygame.draw.rect(screen, c, r, border_radius=r.h // 2)
+    g = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(g, (255, 255, 255, 45), (0, 0, r.w, r.h // 2), border_radius=r.h // 2); screen.blit(g, r.topleft)
+try:
+    BG = pygame.transform.smoothscale(pygame.image.load(THEME + '/_inc/ingame-global-bg.png').convert(), (W, H))
+except Exception:
+    BG = None
+pygame.joystick.init()
+pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+rows, fetched = info(), time.time()
+ignore = time.time() + 0.6
+clock = pygame.time.Clock()
+while True:
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            sys.exit(0)
+        if time.time() > ignore and (e.type == pygame.JOYBUTTONDOWN or (e.type == pygame.KEYDOWN and not pads)):
+            sys.exit(0)
+    if time.time() - fetched > 5:                     # keep it live (cable plugged in, pad connects...)
+        rows, fetched = info(), time.time()
+    screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
+    text('RETROPIE', 30, ACCENT_LT, (px(80), px(60)))
+    text('Network & Connections', 56, TEXT, (px(80), px(95)))
+    panel = pygame.Rect(px(80), px(210), W - px(160), px(100) * len(rows) + px(40))
+    pygame.draw.rect(screen, PANEL, panel, border_radius=px(22))
+    pygame.draw.rect(screen, ACCENT, panel, width=px(3), border_radius=px(22))
+    y = panel.y + px(30)
+    for i, (label, value, colour, note) in enumerate(rows):
+        if i:
+            pygame.draw.line(screen, (30, 45, 60), (panel.x + px(40), y - px(14)), (panel.right - px(40), y - px(14)), 2)
+        text(label, 30, DIM, (panel.x + px(50), y + px(12)))
+        big = 46 if i == 0 else 36
+        r = text(value, big, colour, (panel.x + px(420), y + (0 if i == 0 else px(6))))
+        if note:
+            text(note, 26, DIM, (r.right + px(30), r.centery), 'midleft')
+        y += px(100)
+    r = pygame.Rect(0, 0, px(320), px(58)); r.midbottom = (W // 2, H - px(50))
+    pill(r); text('Press any button', 26, TEXT, r.center, 'center')
+    pygame.display.flip()
+    if shot:
+        pygame.image.save(screen, shot); sys.exit(0)
+    clock.tick(30)

@@ -1,0 +1,11 @@
+#!/bin/bash
+# runcommand shows its "launching" picture with:  feh -F -N -Z -Y -q <image>
+# That call gets the Super RetroPie launch screen instead (same PID, so runcommand's signals reach it).
+# Any other use of feh goes to the real one.
+if [ "$1 $2 $3 $4" = "-F -N -Z -Y" ] && [ -n "$DISPLAY" ] && [ -f /dev/shm/runcommand.info ]; then
+    # already up: EmulationStation's game-start asked the launch screen daemon for it
+    p=$(cat /tmp/retropie-launchscreen.pid 2>/dev/null)
+    [ -n "$p" ] && grep -q retropie-launchscreen /proc/$p/cmdline 2>/dev/null && exec sleep 60
+    exec python3 /usr/local/bin/retropie-launchscreen "$@"
+fi
+exec /usr/bin/feh "$@"

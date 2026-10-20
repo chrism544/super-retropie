@@ -1,0 +1,8 @@
+#!/bin/sh
+# Move an Xbox Bluetooth pad from hid-microsoft / hid-generic to xpadneo. The button
+# mappings (EmulationStation, RetroArch, PCSX2, Cemu) are made for xpadneo (Oct 2026).
+k=$1
+modprobe hid-xpadneo
+[ "$(basename "$(readlink /sys/bus/hid/devices/$k/driver)")" = xpadneo ] && exit 0
+for d in microsoft hid-generic; do [ -e /sys/bus/hid/drivers/$d/$k ] && echo "$k" > /sys/bus/hid/drivers/$d/unbind; done
+echo "$k" > /sys/bus/hid/drivers/xpadneo/bind && echo "xpadneo-rebind: $k now on xpadneo" > /dev/kmsg

@@ -1,0 +1,6 @@
+[Unit]
+Description=Import games dropped into \retropie\drop
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/retropie-drop-import
+Nice=10

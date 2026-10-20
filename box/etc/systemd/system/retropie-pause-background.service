@@ -1,0 +1,9 @@
+[Unit]
+Description=Pause heavy background jobs (unpacking, artwork) while a game is running
+
+[Service]
+ExecStart=/usr/local/bin/retropie-pause-background
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

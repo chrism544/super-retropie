@@ -1,0 +1,14 @@
+#!/bin/bash
+# One-off: build extra emulators from source (Oct 2026). Log: /var/log/retropie-add-emulators.log
+exec >>/var/log/retropie-add-emulators.log 2>&1
+cd /home/pi/RetroPie-Setup || exit 1
+export SUDO_USER=pi      # retropie_packages.sh installs for this user
+declare -A r
+for m in "$@"; do
+    echo; echo "=== [$(date +%T)] $m ==="
+    if ./retropie_packages.sh "$m" && [ -d "/opt/retropie/libretrocores/$m" -o -d "/opt/retropie/emulators/$m" ]; then r[$m]=OK; else r[$m]=FAILED; fi
+    echo "=== [$(date +%T)] $m: ${r[$m]} ==="
+done
+echo; echo "=== Summary [$(date +%T)] ==="; for m in "$@"; do echo "$m: ${r[$m]}"; done
+# Show the new systems in EmulationStation (only if nobody is in a game)
+pgrep -x "retroarch|PPSSPPSDL|mupen64plus" >/dev/null || pkill -x emulationstatio

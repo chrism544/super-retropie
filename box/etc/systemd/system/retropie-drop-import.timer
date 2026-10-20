@@ -1,0 +1,7 @@
+[Unit]
+Description=Check the RetroPie drop folder every 2 minutes
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=2min
+[Install]
+WantedBy=timers.target

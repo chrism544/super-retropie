@@ -1,0 +1,592 @@
+#!/usr/bin/env python3
+"""RetroPie game search - full-screen, controller driven, styled like the bluray theme.
+
+  1. pick a console (or All Systems) from a carousel of the theme's box art
+  2. spell the name one letter at a time on the on-screen keyboard; fuzzy matches
+     update live (typos, word starts, initials, 2 = II ...)
+  3. A on a result writes "<system>\t<rom>" to CHOICE and exits; the launcher runs it.
+
+Controls: D-pad / left stick move, A select, B back, X delete letter, Y space,
+RB jump to results, LB back to keyboard, Start play the highlighted / top result,
+View + Menu quit. A keyboard works too (letters, arrows, Enter, Backspace, Esc).
+"""
+import json, os, re, sys, time, xml.etree.ElementTree as ET
+from difflib import SequenceMatcher
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+import pygame
+
+HOME = os.path.expanduser('~')
+THEME = '/etc/emulationstation/themes/bluray'
+FONT = THEME + '/_inc/fonts/Roboto-Medium.ttf'
+BG = THEME + '/_inc/ingame-global-bg.png'
+STATE = HOME + '/.emulationstation/search-state.json'
+CHOICE = '/tmp/retropie-search-choice'
+SKIP = {'retropie', 'searchgames', 'kodi', 'ports'}
+ACCENT, ACCENT_LT, TEXT, DIM, PANEL = (17, 106, 157), (64, 170, 230), (247, 247, 247), (150, 165, 180), (14, 22, 32)
+
+# ---------------------------------------------------------------- games + fuzzy match
+ROMAN = {'ii': '2', 'iii': '3', 'iv': '4', 'v': '5', 'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'}
+
+def norm(s):
+    s = re.sub(r'\([^)]*\)|\[[^]]*\]', ' ', s.lower())      # drop (Europe) [!] tags
+    return re.sub(r'[^a-z0-9]+', ' ', s).strip()
+
+def tokens(n):
+    words = n.split()
+    out = list(words)
+    for w in words:                                       # II -> 2 and 2 -> ii both match
+        if w in ROMAN:
+            out.append(ROMAN[w])
+        for r, d in ROMAN.items():
+            if w == d:
+                out.append(r)
+    return out
+
+class Game:
+    __slots__ = ('name', 'path', 'system', 'image', 'n', 'words', 'initials', 'ns', 'nd')
+    def __init__(self, name, path, system, image):
+        self.name, self.path, self.system, self.image = name, path, system, image
+        self.n = norm(name) or norm(os.path.basename(path))
+        self.words = tokens(self.n)
+        self.initials = ''.join(w[0] for w in self.n.split())
+        self.ns = self.n.replace(' ', '')                                  # no spaces
+        self.nd = ''.join(ROMAN.get(w, w) for w in self.n.split())        # II -> 2
+
+def word_score(q, g):
+    if g.n.startswith(q):
+        return 100
+    if any(w.startswith(q) for w in g.words):
+        return 90
+    if q in g.n.replace(' ', ''):
+        return 75
+    if len(q) >= 2 and g.initials.startswith(q):             # smw -> Super Mario World
+        return 70
+    if len(q) >= 3:                                          # typos: zelad, strret
+        best = 0
+        for w in g.words:
+            sm = SequenceMatcher(None, q, w[:len(q) + 1])
+            if sm.real_quick_ratio() >= 0.7 and sm.quick_ratio() >= 0.7:
+                best = max(best, sm.ratio())
+        if best >= 0.72:
+            return 60 * best
+    return 0
+
+def whole_score(qs, g):
+    """The query typed without spaces (one letter at a time) against the whole name."""
+    ns = g.ns
+    if ns.startswith(qs) or g.nd.startswith(qs):
+        return 1000
+    if any(w.startswith(qs) for w in g.words):
+        return 850
+    if len(qs) >= 2 and g.initials.startswith(qs):
+        return 800
+    if qs in ns or qs in g.nd:
+        return 700
+    if len(qs) >= 3:                     # typos: compare with the text at each word start
+        best, pos = 0, 0
+        for w in g.n.split():
+            for size in (len(qs) - 1, len(qs), len(qs) + 1):
+                part = ns[pos:pos + size]
+                if not part or part[0] != qs[0]:      # typos rarely hit the first letter - and it keeps this fast
+                    continue
+                sm = SequenceMatcher(None, qs, part)
+                if sm.real_quick_ratio() >= 0.7 and sm.quick_ratio() >= 0.7:
+                    r = sm.ratio() + (0.08 if pos == 0 else 0)   # start of the title wins
+                    best = max(best, r)
+            pos += len(w)
+        if best >= 0.72:
+            return 600 * best
+    return 0
+
+def search(games, query):
+    q = norm(query).split()
+    if not q:
+        return sorted(games, key=lambda g: g.n)
+    qs = ''.join(q)
+    scored = []
+    for g in games:
+        total = whole_score(qs, g)
+        if len(q) > 1:                   # several words: each may match anywhere
+            words = 0
+            for w in q:
+                s = word_score(w, g)
+                if not s:
+                    words = 0
+                    break
+                words += s
+            total = max(total, words * 9 // len(q))
+        if total:
+            scored.append((-total, len(g.n), g.n, g))
+    scored.sort(key=lambda t: t[:3])
+    return [t[3] for t in scored]
+
+def load_systems():
+    cfg = HOME + '/.emulationstation/es_systems.cfg'
+    if not os.path.exists(cfg):
+        cfg = '/etc/emulationstation/es_systems.cfg'
+    systems, seen = [], set()
+    for s in ET.parse(cfg).getroot().iter('system'):
+        name = s.findtext('name', '')
+        folder = os.path.expanduser(s.findtext('path', ''))
+        if name in SKIP or not os.path.isdir(folder) or os.path.realpath(folder) in seen:
+            continue
+        seen.add(os.path.realpath(folder))
+        exts = set(s.findtext('extension', '').lower().split())
+        meta, hidden = {}, set()
+        gl = os.path.join(folder, 'gamelist.xml')
+        if os.path.exists(gl):
+            try:
+                for g in ET.parse(gl).getroot().iter('game'):
+                    p = os.path.normpath(os.path.join(folder, g.findtext('path', '')))
+                    if g.findtext('hidden', '') == 'true':
+                        hidden.add(p)
+                    img = g.findtext('image') or ''
+                    if img and not img.startswith('/'):
+                        img = os.path.normpath(os.path.join(folder, img))
+                    meta[p] = (g.findtext('name') or '', img)
+            except ET.ParseError:
+                pass
+        games = []
+        for root, dirs, files in os.walk(folder):
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('images', 'videos', 'media', 'manuals')]
+            for f in files:
+                if os.path.splitext(f)[1].lower() not in exts:
+                    continue
+                p = os.path.join(root, f)
+                if p in hidden:
+                    continue
+                n, img = meta.get(p, ('', ''))
+                games.append(Game(n or os.path.splitext(f)[0], p, name, img))
+        if games:
+            systems.append({'name': name, 'full': s.findtext('fullname', name),
+                            'theme': s.findtext('theme', name), 'games': games})
+    return systems
+
+# ---------------------------------------------------------------- drawing helpers
+pygame.init()
+# SEARCH_TEST="right,a,char:Z,shot:/tmp/x.png,..." drives it headless for testing
+TEST = [a for a in os.environ.get('SEARCH_TEST', '').split(',') if a]
+screen = pygame.display.set_mode((1920, 1080) if TEST else (0, 0), 0 if TEST else pygame.FULLSCREEN)
+pygame.display.set_caption('Search')
+pygame.mouse.set_visible(False)
+
+try:
+    import subprocess as _sp
+    _sp.Popen(['bash', '-c', 'sleep 0.4; for w in $(xdotool search --pid %d); do xdotool windowactivate "$w"; done' % os.getpid()],
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+except Exception:
+    pass
+W, H = screen.get_size()
+S = H / 1080                                               # designed for 1080p
+def px(v): return int(v * S)
+fonts = {}
+def font(size):
+    if size not in fonts:
+        try:
+            fonts[size] = pygame.font.Font(FONT, px(size))
+        except OSError:
+            fonts[size] = pygame.font.SysFont('dejavusans', px(size))
+    return fonts[size]
+
+def text(s, size, color, pos, anchor='topleft', maxw=None):
+    f = font(size)
+    if maxw and f.size(s)[0] > maxw:
+        while s and f.size(s + '…')[0] > maxw:
+            s = s[:-1]
+        s += '…'
+    surf = f.render(s, True, color)
+    r = surf.get_rect(**{anchor: pos})
+    screen.blit(surf, r)
+    return r
+
+def pill(rect, color=ACCENT, radius=None, border=None):
+    radius = radius if radius is not None else rect.h // 2
+    pygame.draw.rect(screen, color, rect, border_radius=radius)
+    gloss = pygame.Surface(rect.size, pygame.SRCALPHA)       # theme-style glossy top half
+    pygame.draw.rect(gloss, (255, 255, 255, 45), (0, 0, rect.w, rect.h // 2), border_radius=radius)
+    screen.blit(gloss, rect.topleft)
+    if border:
+        pygame.draw.rect(screen, border, rect, width=max(2, px(3)), border_radius=radius)
+
+try:
+    BG_IMG = pygame.transform.smoothscale(pygame.image.load(BG).convert(), (W, H))
+except Exception:
+    BG_IMG = None
+def background():
+    if BG_IMG:
+        screen.blit(BG_IMG, (0, 0))
+    else:
+        screen.fill((0, 0, 0))
+        pygame.draw.line(screen, ACCENT, (px(10), px(20)), (W - px(10), px(20)), 2)
+        pygame.draw.line(screen, ACCENT, (px(10), H - px(20)), (W - px(10), H - px(20)), 2)
+
+def hints(items):
+    x = px(60)
+    y = H - px(75)
+    for btn, label in items:
+        r = pygame.Rect(x, y, max(px(46), font(24).size(btn)[0] + px(24)), px(46))
+        pill(r)
+        text(btn, 24, TEXT, r.center, 'center')
+        x = r.right + px(12)
+        x = text(label, 26, DIM, (x, r.centery), 'midleft').right + px(40)
+
+img_cache = {}
+def image(path, box):
+    key = (path, box)
+    if key not in img_cache:
+        surf = None
+        try:
+            if path and os.path.exists(path):
+                i = pygame.image.load(path).convert_alpha()
+                k = min(box[0] / i.get_width(), box[1] / i.get_height())
+                surf = pygame.transform.smoothscale(i, (max(1, int(i.get_width() * k)), max(1, int(i.get_height() * k))))
+        except Exception:
+            surf = None
+        if len(img_cache) > 300:
+            img_cache.clear()
+        img_cache[key] = surf
+    return img_cache[key]
+
+def box_art(theme):
+    """Top (box) half of the theme's system.png - the reflection is drawn separately."""
+    p = f'{THEME}/{theme}/_inc/system.png'
+    key = ('box', theme)
+    if key not in img_cache:
+        try:
+            i = pygame.image.load(p).convert_alpha()
+            img_cache[key] = i.subsurface((0, 0, i.get_width(), int(i.get_height() * 0.485))).copy()
+        except Exception:
+            img_cache[key] = None
+    return img_cache[key]
+
+# ---------------------------------------------------------------- input
+class Input:
+    """Turns pad / keyboard events into actions, with auto-repeat on directions."""
+    BTN = {0: 'a', 1: 'b', 2: 'x', 3: 'y', 4: 'lb', 5: 'rb', 7: 'start'}
+    def __init__(self):
+        pygame.joystick.init()
+        self.pads = {}
+        self.held, self.next_rep = None, 0
+        self.axis_dir = {}
+        self.down = set()
+        self.ignore_until = time.time() + 0.6
+        self.log = open('/tmp/retropie-search-input.log', 'w')
+    def add(self, idx):
+        j = pygame.joystick.Joystick(idx)
+        self.pads[j.get_instance_id()] = j
+    def _dir(self, d):
+        if d != self.held:
+            self.held = d
+            self.next_rep = time.time() + 0.35
+            return [d] if d else []
+        return []
+    def events(self):
+        if TEST:
+            pygame.event.pump()
+            a = TEST.pop(0) if TEST else 'quit'
+            if a.startswith('shot:'):
+                pygame.image.save(screen, a[5:])
+                return []
+            return [a]
+        out = []
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                out.append('quit')
+            elif e.type == pygame.JOYDEVICEADDED:
+                self.add(e.device_index)
+            elif e.type == pygame.JOYBUTTONDOWN:
+                self.down.add(e.button)
+                if {6, 7} <= self.down:
+                    out.append('quit')
+                elif e.button in self.BTN:
+                    out.append(self.BTN[e.button])
+            elif e.type == pygame.JOYBUTTONUP:
+                self.down.discard(e.button)
+            elif e.type == pygame.JOYHATMOTION:
+                x, y = e.value
+                out += self._dir('left' if x < 0 else 'right' if x > 0 else 'up' if y > 0 else 'down' if y < 0 else None)
+            elif e.type == pygame.JOYAXISMOTION and e.axis in (0, 1):
+                self.axis_dir[e.axis] = e.value
+                x, y = self.axis_dir.get(0, 0), self.axis_dir.get(1, 0)
+                d = None
+                if abs(x) > 0.6 or abs(y) > 0.6:
+                    d = ('left' if x < 0 else 'right') if abs(x) > abs(y) else ('up' if y < 0 else 'down')
+                out += self._dir(d)
+            elif e.type == pygame.KEYDOWN:
+                k = e.key
+                m = {pygame.K_LEFT: 'left', pygame.K_RIGHT: 'right', pygame.K_UP: 'up', pygame.K_DOWN: 'down'}
+                if k in m:
+                    out += self._dir(m[k])
+                elif k in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    out.append('a')
+                elif k == pygame.K_ESCAPE:
+                    out.append('b')
+                elif k == pygame.K_BACKSPACE:
+                    out.append('x')
+                elif k == pygame.K_TAB:
+                    out.append('rb')
+                elif e.unicode and (e.unicode.isalnum() or e.unicode == ' '):
+                    out.append('char:' + e.unicode.upper())
+            elif e.type == pygame.KEYUP and e.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+                self._dir(None)
+        if self.held and time.time() >= self.next_rep:
+            self.next_rep = time.time() + 0.07
+            out.append(self.held)
+        if time.time() < self.ignore_until:   # the A press that opened Search is still held
+            return []
+        if out:
+            self.log.write(f'{time.time() - self.ignore_until:7.2f} {out}\n')
+            self.log.flush()
+        return out
+
+# ---------------------------------------------------------------- screens
+KEYS = [list('ABCDEF'), list('GHIJKL'), list('MNOPQR'), list('STUVWX'), list('YZ0123'), list('456789'),
+        ['SPACE', 'DELETE', 'CLEAR']]
+
+def loading():
+    background()
+    text('Search', 64, TEXT, (W // 2, H // 2 - px(40)), 'center')
+    text('Loading games…', 32, DIM, (W // 2, H // 2 + px(30)), 'center')
+    pygame.display.flip()
+
+def console_picker(inp, systems, sel):
+    clock = pygame.time.Clock()
+    while True:
+        for a in inp.events():
+            if a == 'quit':
+                return None
+            if a == 'left':
+                sel = (sel - 1) % len(systems)
+            elif a == 'right':
+                sel = (sel + 1) % len(systems)
+            elif a in ('a', 'start'):
+                return sel
+            elif a == 'b':
+                return None
+        background()
+        text('SEARCH', 40, ACCENT_LT, (px(80), px(60)))
+        text('Choose a console', 56, TEXT, (px(80), px(105)))
+        cw, gap, cy = px(300), px(40), px(560)
+        for off in range(-4, 5):
+            i = (sel + off) % len(systems)
+            s = systems[i]
+            scale = 1.18 if off == 0 else 0.92
+            bw, bh = int(cw * scale), int(cw * scale * 1.29)
+            cx = W // 2 + off * (cw + gap)
+            if cx + bw < 0 or cx - bw > W:
+                continue
+            art = box_art(s['theme'])
+            r = pygame.Rect(0, 0, bw, bh)
+            r.center = (cx, cy)
+            if art:
+                surf = pygame.transform.smoothscale(art, (bw, bh))
+                if off:
+                    surf.set_alpha(150)
+                screen.blit(surf, r)
+                refl = pygame.transform.flip(surf, False, True)  # theme-style reflection
+                refl.set_alpha(45 if off else 70)
+                screen.blit(refl, (r.x, r.bottom + px(6)), (0, 0, bw, bh // 3))
+            else:
+                pill(r, PANEL if off else ACCENT, radius=px(18), border=ACCENT)
+                text(s['full'], 34, TEXT, r.center, 'center', maxw=bw - px(20))
+        s = systems[sel]
+        n = len(s['games'])
+        label = f"{s['full']}  ·  {n} game{'s' * (n != 1)}"
+        r = pygame.Rect(0, 0, min(W - px(200), max(px(520), font(30).size(label)[0] + px(80))), px(64))
+        r.center = (W // 2, px(925))
+        pill(r)
+        text(label, 30, TEXT, r.center, 'center', maxw=r.w - px(30))
+        hints([('A', 'Choose'), ('B', 'Exit'), ('D-PAD', 'Browse')])
+        pygame.display.flip()
+        clock.tick(60)
+
+def search_screen(inp, system, query):
+    """Returns ('play', game) | ('back', query) | ('quit', query)."""
+    games = system['games']
+    clock = pygame.time.Clock()
+    focus, kr, kc, rsel, rtop = 'kbd', 0, 0, 0, 0
+    cache_q, results = None, []
+    ROWS = 12
+    t0 = time.time()
+    while True:
+        for a in inp.events():
+            if a == 'quit':
+                return 'quit', query
+            if a.startswith('char:'):
+                query += a[5:]
+                continue
+            if a == 'x':
+                query = query[:-1]
+            elif a == 'y':
+                query += ' '
+            elif a == 'start' and results:
+                return 'play', results[rsel if focus == 'res' else 0]
+            elif focus == 'kbd':
+                row = KEYS[kr]
+                if a == 'up':
+                    kr = (kr - 1) % len(KEYS); kc = min(kc, len(KEYS[kr]) - 1)
+                elif a == 'down':
+                    kr = (kr + 1) % len(KEYS); kc = min(kc, len(KEYS[kr]) - 1)
+                elif a == 'left':
+                    kc = (kc - 1) % len(row)
+                elif a == 'right':
+                    if kc == len(row) - 1 and results:
+                        focus = 'res'
+                    else:
+                        kc = (kc + 1) % len(row)
+                elif a == 'rb' and results:
+                    focus = 'res'
+                elif a == 'a':
+                    k = row[kc]
+                    if k == 'SPACE':
+                        query += ' '
+                    elif k == 'DELETE':
+                        query = query[:-1]
+                    elif k == 'CLEAR':
+                        query = ''
+                    else:
+                        query += k
+                elif a == 'b':
+                    return 'back', query
+            else:  # results
+                if a == 'up':
+                    rsel = max(0, rsel - 1)
+                elif a == 'down':
+                    rsel = min(len(results) - 1, rsel + 1)
+                elif a in ('left', 'lb', 'b'):
+                    focus = 'kbd'
+                elif a == 'rb':
+                    rsel = min(len(results) - 1, rsel + ROWS)
+                elif a == 'a':
+                    return 'play', results[rsel]
+        if query != cache_q:
+            # typing one more letter only narrows the list: search the previous matches
+            base = results if cache_q and query.startswith(cache_q) and norm(cache_q) else games
+            results, cache_q, rsel, rtop = search(base, query), query, 0, 0
+        if not results:
+            focus = 'kbd'
+        rtop = min(max(rtop, rsel - ROWS + 1), rsel)
+
+        background()
+        # header: small system box + title
+        art = box_art(system['theme'])
+        if art:
+            screen.blit(pygame.transform.smoothscale(art, (px(110), px(142))), (px(70), px(45)))
+        text('SEARCH', 30, ACCENT_LT, (px(205), px(58)))
+        text(system['full'], 52, TEXT, (px(205), px(92)), maxw=px(800))
+        # query box
+        qr = pygame.Rect(px(70), px(215), px(760), px(90))
+        pygame.draw.rect(screen, PANEL, qr, border_radius=px(14))
+        pygame.draw.rect(screen, ACCENT, qr, width=px(3), border_radius=px(14))
+        cursor = '|' if int((time.time() - t0) * 2) % 2 == 0 else ' '
+        if query:
+            text(query + cursor, 50, TEXT, (qr.x + px(26), qr.centery), 'midleft', maxw=qr.w - px(40))
+        else:
+            text('Pick letters below' + cursor, 40, DIM, (qr.x + px(26), qr.centery), 'midleft')
+        # keyboard
+        ky, kw, kh, kg = px(335), px(116), px(78), px(12)
+        for r_i, row in enumerate(KEYS):
+            wide = len(row) == 3
+            w = (kw * 6 + kg * 5 - kg * 2) // 3 if wide else kw
+            for c_i, k in enumerate(row):
+                rect = pygame.Rect(px(70) + c_i * (w + kg), ky + r_i * (kh + kg), w, kh)
+                on = focus == 'kbd' and r_i == kr and c_i == kc
+                if on:
+                    pill(rect.inflate(px(8), px(8)), ACCENT, radius=px(14), border=ACCENT_LT)
+                else:
+                    pygame.draw.rect(screen, PANEL, rect, border_radius=px(12))
+                    pygame.draw.rect(screen, (40, 60, 80), rect, width=2, border_radius=px(12))
+                text(k, 30 if wide else 40, TEXT if on else (210, 220, 230), rect.center, 'center')
+        # results
+        lx, ly, lw, rh = px(900), px(215), px(560), px(57)
+        n = len(results)
+        label = f'{n} match{"es" * (n != 1)}' if query.strip() else f'All {n} games'
+        text(label, 30, ACCENT_LT if n else (230, 120, 120), (lx, ly - px(5)))
+        if not n:
+            text('No matches - try fewer letters', 32, DIM, (lx, ly + px(60)))
+        for i in range(rtop, min(n, rtop + ROWS)):
+            g = results[i]
+            rr = pygame.Rect(lx, ly + px(48) + (i - rtop) * rh, lw, rh - px(6))
+            if focus == 'res' and i == rsel:
+                pill(rr, ACCENT, radius=px(12))
+            elif i == rsel:
+                pygame.draw.rect(screen, ACCENT, rr, width=2, border_radius=px(12))
+            text(g.name, 30, TEXT, (rr.x + px(18), rr.centery), 'midleft', maxw=lw - px(36))
+        if n > ROWS:   # scroll bar
+            bar = pygame.Rect(lx + lw + px(12), ly + px(48), px(6), ROWS * rh)
+            pygame.draw.rect(screen, (40, 60, 80), bar, border_radius=px(3))
+            th = max(px(30), bar.h * ROWS // n)
+            ty = bar.y + (bar.h - th) * rtop // max(1, n - ROWS)
+            pygame.draw.rect(screen, ACCENT_LT, (bar.x, ty, bar.w, th), border_radius=px(3))
+        # artwork of highlighted game
+        if results:
+            g = results[rsel]
+            ax, aw, ah = px(1510), px(360), px(470)
+            img = image(g.image, (aw, ah))
+            if img:
+                screen.blit(img, img.get_rect(midtop=(ax + aw // 2, ly + px(48))))
+            else:
+                ph = pygame.Rect(ax, ly + px(48), aw, ah)
+                pygame.draw.rect(screen, PANEL, ph, border_radius=px(14))
+                text('No artwork', 28, DIM, ph.center, 'center')
+            yy = ly + px(48) + ah + px(25)
+            for line in wrap(g.name, 30, aw)[:3]:
+                text(line, 30, TEXT, (ax + aw // 2, yy), 'midtop'); yy += px(40)
+            sysname = next((s['full'] for s in SYSTEMS if s['name'] == g.system), g.system)
+            text(sysname, 26, ACCENT_LT, (ax + aw // 2, yy + px(6)), 'midtop', maxw=aw)
+        if focus == 'kbd':
+            hints([('A', 'Type'), ('X', 'Delete'), ('Y', 'Space'), ('RB', 'Results'), ('START', 'Play top'), ('B', 'Consoles')])
+        else:
+            hints([('A', 'Play'), ('LB', 'Keyboard'), ('RB', 'Page down'), ('X', 'Delete'), ('B', 'Keyboard')])
+        pygame.display.flip()
+        clock.tick(60)
+
+def wrap(s, size, maxw):
+    f, lines, cur = font(size), [], ''
+    for w in s.split():
+        t = (cur + ' ' + w).strip()
+        if f.size(t)[0] <= maxw:
+            cur = t
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    return lines + ([cur] if cur else [])
+
+# ---------------------------------------------------------------- main
+loading()
+SYSTEMS = load_systems()
+allg = [g for s in SYSTEMS for g in s['games']]
+SYSTEMS.insert(0, {'name': 'all', 'full': 'All Systems', 'theme': 'searchgames', 'games': allg})
+try:
+    state = json.load(open(STATE))
+except Exception:
+    state = {}
+sel = 0                                   # always start on All Systems
+inp = Input()
+for i in range(pygame.joystick.get_count()):
+    inp.add(i)
+try:
+    os.remove(CHOICE)
+except OSError:
+    pass
+query = ''
+while True:
+    sel = console_picker(inp, SYSTEMS, sel)
+    if sel is None:
+        break
+    what, x = search_screen(inp, SYSTEMS[sel], query)
+    state = {'system': SYSTEMS[sel]['name']}
+    if what == 'play':
+        with open(CHOICE, 'w') as fh:
+            fh.write(f'{x.system}\t{x.path}\n')
+        break
+    query = x
+    state['query'] = query
+    if what == 'quit':
+        break
+try:
+    json.dump(state, open(STATE, 'w'))
+except OSError:
+    pass
+pygame.quit()

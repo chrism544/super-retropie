@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Network settings helper for the Network screen (run as root: sudo -n retropie-netcfg ...).
+
+  retropie-netcfg show                               current settings as JSON
+  retropie-netcfg apply dhcp                         automatic address
+  retropie-netcfg apply static <ip/prefix> <gateway> <dns>[,<dns2>]
+  retropie-netcfg confirm                            keep the new settings
+  retropie-netcfg revert                             put the previous settings back
+
+apply keeps the old file in /var/lib/retropie-net/ and puts it back by itself after 60 s unless
+"confirm" is run - so a wrong address can never lock the box off the network. Wired (en*) only,
+the way the box is set up; Wi-Fi blocks in the file are kept as they are.
+"""
+import ipaddress, json, os, shutil, subprocess, sys
+import yaml
+
+NETPLAN = '/etc/netplan/50-cloud-init.yaml'
+STATE = '/var/lib/retropie-net'
+BACKUP = STATE + '/previous.yaml'
+REVERT_UNIT = 'retropie-net-revert'
+
+def load():
+    try:
+        return yaml.safe_load(open(NETPLAN)) or {}
+    except OSError:
+        return {}
+
+def wired(cfg):
+    eths = cfg.get('network', {}).get('ethernets', {})
+    for name, e in eths.items():
+        return name, e
+    return 'wired', {}
+
+def show():
+    name, e = wired(load())
+    out = {'mode': 'dhcp' if e.get('dhcp4', True) and not e.get('addresses') else 'static',
+           'address': (e.get('addresses') or [''])[0], 'gateway': '', 'dns': []}
+    for r in e.get('routes', []) or []:
+        if r.get('to') in ('default', '0.0.0.0/0'): out['gateway'] = r.get('via', '')
+    out['gateway'] = out['gateway'] or e.get('gateway4', '')
+    out['dns'] = (e.get('nameservers') or {}).get('addresses', [])
+    out['pending'] = subprocess.run(['systemctl', 'is-active', '-q', REVERT_UNIT + '.timer']).returncode == 0
+    print(json.dumps(out))
+
+def write(cfg):
+    tmp = NETPLAN + '.new'
+    with open(tmp, 'w') as f:
+        f.write('# Written by the Super RetroPie Network screen (retropie-netcfg)\n')
+        yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, NETPLAN)
+
+def apply(args):
+    cfg = load() or {'network': {'version': 2}}
+    net = cfg.setdefault('network', {}); net.setdefault('version', 2)
+    eths = net.setdefault('ethernets', {})
+    name, _ = wired(cfg)
+    e = {'match': {'name': 'en*'}, 'optional': True}
+    if args[0] == 'dhcp':
+        e['dhcp4'] = True
+    elif args[0] == 'static' and len(args) == 4:
+        iface = ipaddress.ip_interface(args[1])                     # validates "10.5.0.19/24"
+        gw = ipaddress.ip_address(args[2])
+        dns = [str(ipaddress.ip_address(d)) for d in args[3].split(',') if d]
+        if gw not in iface.network: sys.exit('gateway is not on the same network as the address')
+        e.update({'dhcp4': False, 'addresses': [str(iface)], 'routes': [{'to': 'default', 'via': str(gw)}],
+                  'nameservers': {'addresses': dns}})
+    else:
+        sys.exit(__doc__)
+    eths.clear(); eths[name] = e
+    os.makedirs(STATE, exist_ok=True)
+    if os.path.exists(NETPLAN) and not os.path.exists(BACKUP):   # keep the last confirmed settings
+        shutil.copy2(NETPLAN, BACKUP)
+    write(cfg)
+    subprocess.run(['systemctl', 'stop', REVERT_UNIT + '.timer'], capture_output=True)
+    subprocess.run(['systemd-run', '--on-active=60', f'--unit={REVERT_UNIT}', sys.argv[0], 'revert'], capture_output=True)
+    r = subprocess.run(['netplan', 'apply'], capture_output=True, text=True)
+    print('applied' if r.returncode == 0 else 'netplan error: ' + r.stderr.strip()[-200:])
+
+def confirm():
+    subprocess.run(['systemctl', 'stop', REVERT_UNIT + '.timer'], capture_output=True)
+    if os.path.exists(BACKUP): os.remove(BACKUP)
+    print('kept')
+
+def revert():
+    subprocess.run(['systemctl', 'stop', REVERT_UNIT + '.timer'], capture_output=True)
+    if os.path.exists(BACKUP):
+        shutil.copy2(BACKUP, NETPLAN); os.chmod(NETPLAN, 0o600); os.remove(BACKUP)
+        subprocess.run(['netplan', 'apply'], capture_output=True)
+        print('reverted')
+    else:
+        print('nothing to undo')
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'show'
+    {'show': show, 'confirm': confirm, 'revert': revert}.get(cmd, lambda: apply(sys.argv[2:]))()

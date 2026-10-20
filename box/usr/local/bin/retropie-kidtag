@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Mark kid-friendly games (EmulationStation <kidgame>) from their scraped genre.
+  retropie-kidtag count | set | clear
+Kid-friendly: platform, puzzle, racing, sports, party, educational... and not shooting,
+fighting, gambling, horror or adult. Run 'set'/'clear' only while EmulationStation is stopped."""
+import glob, os, re, sys, xml.etree.ElementTree as ET
+
+ROMS = os.path.expanduser('~/RetroPie/roms')
+GOOD = re.compile(r'platform|puzzle|racing|driving|kart|sport|baseball|football|soccer|basketball|golf|hockey|tennis|'
+                  r'party|educational|maze|run.?(&amp;|&)?.?jump|music|rhythm|board|pinball|drop|bowling|skat|snowboard|'
+                  r'pet|life|family|kids?\b', re.I)
+BAD = re.compile(r'shoot|shmup|fight|beat.?.?em|gun|casino|gambl|mahjong|horror|survival|adult|hentai|war\b|'
+                 r'versus|brawl|asiatic|quiz', re.I)
+
+def kid(g):
+    genre = g.findtext('genre') or ''
+    return bool(genre) and bool(GOOD.search(genre)) and not BAD.search(genre)
+
+mode = sys.argv[1] if len(sys.argv) > 1 else 'count'
+total = 0
+for gl in glob.glob(f'{ROMS}/*/gamelist.xml'):
+    if os.path.islink(os.path.dirname(gl)):
+        continue
+    tree = ET.parse(gl); n = 0; changed = False
+    for g in tree.getroot().iter('game'):
+        if g.findtext('hidden') == 'true':
+            continue
+        want = kid(g) if mode != 'clear' else False
+        n += want
+        if mode in ('set', 'clear'):
+            e = g.find('kidgame')
+            if want:
+                if e is None: e = ET.SubElement(g, 'kidgame')
+                if e.text != 'true': e.text = 'true'; changed = True
+            elif e is not None:
+                g.remove(e); changed = True
+    if changed:
+        tree.write(gl, encoding='utf-8', xml_declaration=True)
+    total += n
+print(total)

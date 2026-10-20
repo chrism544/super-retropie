@@ -1,0 +1,9 @@
+img = Image("splash.png");
+w = Window.GetWidth(); h = Window.GetHeight();
+s = Sprite(img.Scale(w, h)); s.SetX(0); s.SetY(0); s.SetZ(0);
+# small pulsing dot under the picture while it boots
+dot = Image("dot.png");
+d = Sprite(dot); d.SetX(w / 2 - dot.GetWidth() / 2); d.SetY(h * 0.93);
+t = 0;
+fun refresh() { t++; d.SetOpacity(0.35 + 0.65 * Math.Abs(Math.Sin(t / 20))); }
+Plymouth.SetRefreshFunction(refresh);

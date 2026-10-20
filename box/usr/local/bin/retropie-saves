@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Super RetroPie save files: snapshots and the Save Manager screen.
+
+  retropie-saves snapshot <rom path>   copy that game's saves into a dated snapshot (runcommand-onend)
+  retropie-saves snapshot-all          nightly: every game whose saves changed since its last snapshot
+  retropie-saves                        Save Manager screen
+
+Saves = files next to the game sharing its name: .srm .sav .dsv (in-game saves), .state .stateN
+(save states), .state.auto (resume point). Snapshots: ~/RetroPie/save-snapshots/<system>/<game>/<YYYY-MM-DD HHMM>/
+kept 30 days (the newest 3 per game are always kept).
+"""
+import glob, os, re, shutil, sys, time, xml.etree.ElementTree as ET
+
+ROMS = os.path.expanduser('~/RetroPie/roms')
+SNAP = os.path.expanduser('~/RetroPie/save-snapshots')
+SAVE_RE = re.compile(r'\.(srm|sav|dsv|state\d*|state\.auto)$')
+KEEP_DAYS = 30
+
+def save_files(rom):
+    d, stem = os.path.dirname(rom), os.path.splitext(os.path.basename(rom))[0]
+    return sorted(f for f in glob.glob(glob.escape(os.path.join(d, stem)) + '.*') if SAVE_RE.search(f))
+
+def snap_dir(rom):
+    system = os.path.relpath(rom, ROMS).split(os.sep)[0]
+    return os.path.join(SNAP, system, os.path.splitext(os.path.basename(rom))[0])
+
+def snapshots(rom):
+    d = snap_dir(rom)
+    return sorted((os.path.join(d, s) for s in os.listdir(d)), reverse=True) if os.path.isdir(d) else []
+
+def snapshot(rom, label=''):
+    files = save_files(rom)
+    if not files:
+        return None
+    last = snapshots(rom)
+    if last and all(os.path.exists(os.path.join(last[0], os.path.basename(f))) and
+                    os.path.getmtime(f) <= os.path.getmtime(os.path.join(last[0], os.path.basename(f))) for f in files):
+        return last[0]                                 # nothing changed since the last one
+    out = os.path.join(snap_dir(rom), time.strftime('%Y-%m-%d %H%M%S') + (f' {label}' if label else ''))
+    os.makedirs(out, exist_ok=True)
+    for f in files:
+        shutil.copy2(f, out)
+    prune(rom)
+    return out
+
+def prune(rom):
+    s = snapshots(rom)
+    for old in s[3:]:
+        if time.time() - os.path.getmtime(old) > KEEP_DAYS * 86400:
+            shutil.rmtree(old, ignore_errors=True)
+
+def restore(rom, snap):
+    snapshot(rom, 'before restore')                    # current saves stay recoverable
+    for f in save_files(rom):
+        os.remove(f)
+    for f in os.listdir(snap):
+        shutil.copy2(os.path.join(snap, f), os.path.dirname(rom))
+
+def all_games():
+    """[(system, rom path, display name)] for every game that has save files."""
+    out = []
+    for sysdir in sorted(glob.glob(ROMS + '/*/')):
+        system = os.path.basename(sysdir.rstrip('/'))
+        if os.path.islink(sysdir.rstrip('/')):
+            continue
+        names = {}
+        gl = sysdir + 'gamelist.xml'
+        if os.path.exists(gl):
+            try:
+                for g in ET.parse(gl).getroot().iter('game'):
+                    p = g.findtext('path') or ''
+                    names[os.path.normpath(sysdir + p[2:] if p.startswith('./') else p)] = g.findtext('name')
+            except ET.ParseError:
+                pass
+        seen = set()
+        for f in glob.glob(sysdir + '**/*', recursive=True):
+            if not SAVE_RE.search(f) or '/media/' in f:
+                continue
+            stem = SAVE_RE.sub('', f)
+            if stem in seen:
+                continue
+            seen.add(stem)
+            roms = [r for r in glob.glob(glob.escape(stem) + '.*') if not SAVE_RE.search(r) and not r.endswith(('.png', '.cfg'))]
+            rom = roms[0] if roms else stem
+            out.append((system, rom, names.get(os.path.normpath(rom)) or os.path.basename(stem)))
+    return out
+
+if len(sys.argv) > 1 and sys.argv[1] == 'snapshot':
+    print(snapshot(sys.argv[2]) or 'no saves'); sys.exit(0)
+if len(sys.argv) > 1 and sys.argv[1] == 'snapshot-all':
+    n = sum(1 for _, rom, _ in all_games() if snapshot(rom, 'nightly'))
+    print(f'{n} games checked'); sys.exit(0)
+
+# ------------------------------------------------------------------ Save Manager screen
+sys.path.insert(0, '/usr/local/lib/retropie')
+import retropie_ui as ui
+import pygame
+import cheats, saveedit
+
+_extra = {}
+def game_actions(system, rom):
+    """Actions on a game's page: cheats and save editing first, then snapshots."""
+    if rom not in _extra:
+        n = len(cheats.available(system, rom))
+        _extra[rom] = ((['Cheats (Game Genie)'] if n else []) +
+                       (['Edit save (lives, items, money...)'] if saveedit.find_editor(system, rom) else []))
+    snaps = snapshots(rom)
+    return (_extra[rom] + ['Take a snapshot now'] + [f'Restore: {os.path.basename(s)}' for s in snaps[:12]] +
+            (['Delete the resume point (auto save)'] if any(f.endswith('.state.auto') for f in save_files(rom)) else []))
+KIND = lambda f: ('Resume point (auto)' if f.endswith('.state.auto') else 'Save state' if '.state' in f else 'In-game save')
+ago = lambda t: time.strftime('%d %b %Y  %H:%M', time.localtime(t))
+
+games = sorted(all_games(), key=lambda g: max([os.path.getmtime(f) for f in save_files(g[1])] or [0]), reverse=True)
+inp = ui.Input(); sel, top, ROWS = 0, 0, 11
+mode, sub, msg, confirm = 'list', 0, '', None
+clock = pygame.time.Clock()
+while True:
+    for a in inp.read():
+        if mode == 'list':
+            if a == 'up': sel = max(0, sel - 1)
+            elif a == 'down': sel = min(len(games) - 1, sel + 1)
+            elif a == 'b': sys.exit(0)
+            elif a == 'a' and games: mode, sub, msg, confirm = 'game', 0, '', None
+        else:
+            system, rom, name = games[sel]
+            snaps = snapshots(rom)
+            actions = game_actions(system, rom)
+            first = actions.index('Take a snapshot now')   # restore entries follow it
+            if a == 'up': sub = max(0, sub - 1); confirm = None
+            elif a == 'down': sub = min(len(actions) - 1, sub + 1); confirm = None
+            elif a == 'b': mode = 'list'
+            elif a == 'a':
+                act = actions[sub]
+                if act.startswith('Cheats'):
+                    n = cheats.cheats_screen(system, rom, name)
+                    msg = f'{n} cheat{"s" * (n != 1)} on - they work from the next time you start the game' if n else 'No cheats on'
+                elif act.startswith('Edit save'):
+                    msg = saveedit.edit_screen(system, rom, name, snapshot) or ''
+                elif act.startswith('Take'):
+                    msg = 'Snapshot saved' if snapshot(rom, 'manual') else 'Nothing to save'
+                elif confirm != sub:
+                    confirm = sub; msg = 'Press A again to confirm'
+                elif act.startswith('Restore'):
+                    restore(rom, snaps[sub - first - 1]); msg = 'Restored - your previous saves were kept as a snapshot'; confirm = None
+                else:
+                    snapshot(rom, 'before delete')
+                    for f in save_files(rom):
+                        if f.endswith('.state.auto'): os.remove(f)
+                    msg = 'Resume point deleted - the game starts from its own save next time'; confirm = None
+    top = min(max(top, sel - ROWS + 1), sel)
+    ui.background()
+    if mode == 'list':
+        ui.header('SETTINGS', 'Save Manager', f'{len(games)} games with saves - newest first')
+        y = ui.px(225)
+        for i in range(top, min(len(games), top + ROWS)):
+            system, rom, name = games[i]
+            files = save_files(rom)
+            r = pygame.Rect(ui.px(80), y, ui.W - ui.px(160), ui.px(62))
+            if i == sel: ui.pill(r, rad=ui.px(14))
+            else: pygame.draw.rect(ui.screen, ui.PANEL, r, border_radius=ui.px(14))
+            ui.text(name, 30, ui.TEXT, (r.x + ui.px(28), r.centery), 'midleft', maxw=ui.px(900))
+            ui.text(system.upper(), 22, ui.TEXT if i == sel else ui.DIM, (r.x + ui.px(960), r.centery), 'midleft')
+            if files:
+                ui.text(ago(max(os.path.getmtime(f) for f in files)), 26, ui.TEXT if i == sel else ui.ACCENT_LT, (r.right - ui.px(28), r.centery), 'midright')
+            y += ui.px(70)
+        if not games:
+            ui.text('No saves yet', 34, ui.DIM, (ui.px(80), ui.px(260)))
+        ui.hints([('A', 'Open'), ('B', 'Back')])
+    else:
+        system, rom, name = games[sel]
+        ui.header(system.upper(), name)
+        y = ui.px(200)
+        ui.text('Saves now', 28, ui.ACCENT_LT, (ui.px(80), y)); y += ui.px(46)
+        for f in save_files(rom):
+            ui.text(f'{KIND(f)}', 28, ui.TEXT, (ui.px(100), y))
+            ui.text(ago(os.path.getmtime(f)), 28, ui.DIM, (ui.px(600), y)); y += ui.px(40)
+        on = cheats.enabled(system, rom) if cheats.core_name(system, rom) else set()
+        if on:
+            y += ui.px(20); ui.text(f'Cheats on ({len(on)})', 28, ui.ACCENT_LT, (ui.px(80), y)); y += ui.px(46)
+            for d, _ in sorted(on)[:8]:
+                ui.text(d, 26, ui.GOOD, (ui.px(100), y), maxw=ui.px(820)); y += ui.px(38)
+        snaps = snapshots(rom)
+        actions = game_actions(system, rom)
+        x2 = ui.px(980); yy = ui.px(200)
+        ui.text(f'{len(snaps)} snapshots', 28, ui.ACCENT_LT, (x2, yy)); yy += ui.px(50)
+        for i, act in enumerate(actions[:14]):
+            r = pygame.Rect(x2, yy, ui.W - x2 - ui.px(80), ui.px(54))
+            if i == sub: ui.pill(r, rad=ui.px(12))
+            else: pygame.draw.rect(ui.screen, ui.PANEL, r, border_radius=ui.px(12))
+            ui.text(act, 26, ui.TEXT, (r.x + ui.px(22), r.centery), 'midleft', maxw=r.w - ui.px(40))
+            yy += ui.px(62)
+        if msg:
+            ui.text(msg, 28, ui.GOOD, (ui.px(80), ui.H - ui.px(140)))
+        ui.hints([('A', 'Open' if actions[sub].startswith(('Cheats', 'Edit')) else 'Do it'), ('B', 'Back')])
+    pygame.display.flip()
+    if ui.SHOT:
+        pygame.image.save(ui.screen, ui.SHOT); sys.exit(0)
+    clock.tick(30)

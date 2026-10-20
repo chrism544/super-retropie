@@ -1,0 +1,7 @@
+# Xbox Bluetooth pads -> xpadneo (hid-microsoft grabs them first otherwise)
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep000002E0", RUN+="/usr/local/bin/xpadneo-rebind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep000002FD", RUN+="/usr/local/bin/xpadneo-rebind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep00000B05", RUN+="/usr/local/bin/xpadneo-rebind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep00000B13", RUN+="/usr/local/bin/xpadneo-rebind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep00000B20", RUN+="/usr/local/bin/xpadneo-rebind %k"
+ACTION=="add", SUBSYSTEM=="hid", ENV{MODALIAS}=="hid:b0005g*v0000045Ep00000B22", RUN+="/usr/local/bin/xpadneo-rebind %k"

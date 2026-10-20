@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply the saved CPU power mode (Performance menu; default 50 W)
+# Tested 2026-10-18: sustained ~44 W, 75 C, ~24% higher all-core clock than at 35 W.
+# Change it in RetroPie menu > Performance (saved in /etc/retropie-power-limit).
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/retropie-power-set
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
