@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070b10">
-<title>Super RetroPie</title><style>
+<title>Super RetroPie Companion</title><style>
 :root{--bg:#070b10;--panel:#0e1620;--line:#1c2a3a;--accent:#116a9d;--accent-lt:#40aae6;--text:#f7f7f7;--dim:#a3b3c2;--good:#5ac878;--warn:#e6b450;--bad:#ef7d7d;
   --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--sb:env(safe-area-inset-bottom,0px)}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}*{box-sizing:border-box}
@@ -46,24 +46,45 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
 .msg{min-height:1.4em;margin-top:8px}.note{font-size:.875rem;color:var(--warn);margin-top:8px}.empty{color:var(--dim);font-size:.95rem}
 .sum{margin-top:12px;padding:10px 12px;border-radius:10px;background:#05080c;font-size:.9rem}
 .hide{display:none!important}
+/* tablets: a wider single column */
+@media (min-width:640px){.wrap{max-width:760px;padding:0 24px}nav div{max-width:760px}}
+/* laptops and desktops: tabs along the top, two columns per tab */
+@media (min-width:900px){
+  .wrap{max-width:1160px;padding:0 32px}h1{font-size:2rem}
+  #app{display:flex;flex-direction:column}#app main.wrap{width:100%}
+  nav{order:-1;position:sticky;top:0;bottom:auto;border-top:0;border-bottom:1px solid var(--line);padding:8px 32px;margin-top:8px}
+  nav div{max-width:1096px;justify-content:flex-start;gap:6px}
+  nav button{flex:none;flex-direction:row;gap:8px;min-height:44px;padding:8px 18px;font-size:.95rem;border-radius:999px}
+  nav button svg{width:20px;height:20px}
+  main{padding-bottom:48px}
+  .panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 24px;align-items:start}
+  .panel .span{grid-column:1/-1}
+  #p-stats{grid-template-columns:minmax(0,1fr)}#p-stats .card:not(.nums){columns:2;column-gap:32px}#p-stats .card h2{column-span:all}#p-stats .row{break-inside:avoid}
+  .list{max-height:340px}.now img{width:140px;height:140px}.big{font-size:1.6rem}
+  main.login{max-width:440px;margin:6vh auto 0}
+  .btn,.mode,.opt,.pill,nav button,.lnk{transition:background-color .15s,border-color .15s,color .15s}
+  nav button:hover{color:var(--text);background:var(--panel)}.opt:hover,.mode:hover:not(:disabled){background:#0b2233}
+  .btn:hover:not(:disabled),.pill:hover{filter:brightness(1.15)}.lnk:hover{color:var(--text)}
+}
+@media (min-width:1400px){.wrap{max-width:1280px}nav div{max-width:1216px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (orientation:landscape) and (max-height:500px){nav button span{display:none}nav button{min-height:44px}main{padding-bottom:calc(72px + var(--sb))}}
 </style></head><body>
-<header class="wrap"><small>SUPER RETROPIE</small><h1>Phone companion</h1>
+<header class="wrap"><small>SUPER RETROPIE</small><h1>Companion</h1>
 <div id="conn" class="conn" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="conntext">Connecting to Super RetroPie…</span><button id="retry" class="pill hide" onclick="start()">Retry</button></div></header>
 
-<section id="login" class="wrap hide"><main><div class="card"><h2>Pair this phone</h2>
+<section id="login" class="wrap hide"><main class="login"><div class="card"><h2>Pair this device</h2>
 <p class="dim">Enter the PIN shown on the TV: RetroPie menu › Phone Companion.</p>
 <label for="pin">4-digit PIN</label>
 <div class="pinrow"><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code"><button id="pinshow" class="pill" type="button" aria-pressed="false" onclick="togglePin()">Show</button></div>
 <button id="pinbtn" class="btn" onclick="login()">Connect</button><div id="lmsg" class="msg err" role="alert"></div></div></main></section>
 
 <section id="app" class="hide"><main class="wrap">
-<div id="p-now" role="tabpanel" aria-labelledby="t-now">
+<div id="p-now" class="panel" role="tabpanel" aria-labelledby="t-now">
  <div class="card"><h2>On the TV</h2><div class="now"><img id="art" class="hide" alt=""><div class="grow"><span id="nowbadge" class="badge">Idle</span><div id="now" class="big" style="margin-top:6px">-</div><div id="nowsub" class="dim"></div></div></div></div>
  <div class="card"><h2>Recently played</h2><div id="recent"></div></div></div>
 
-<div id="p-upload" role="tabpanel" aria-labelledby="t-upload" class="hide">
+<div id="p-upload" class="panel hide" role="tabpanel" aria-labelledby="t-upload">
  <div class="card"><h2>Add games</h2>
  <p class="dim small">Use games you have dumped or ripped yourself. The box imports them by itself after uploading and they appear in the game menu.</p>
  <span class="lbl" id="sysl">1. Console</span>
@@ -81,11 +102,11 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
  <div id="umsg" class="msg" role="alert"></div></div>
  <div class="card"><h2>Your uploads</h2><p class="dim small">Uploaded › Importing › Ready to play. Updates by itself.</p><div id="ups"></div></div></div>
 
-<div id="p-stats" role="tabpanel" aria-labelledby="t-stats" class="hide">
- <div class="card nums"><div><b id="wk">-</b><span class="dim">hours, last 7 days</span></div><div><b id="tot">-</b><span class="dim">hours in total</span></div><div><b id="gms">-</b><span class="dim">games played</span></div></div>
+<div id="p-stats" class="panel hide" role="tabpanel" aria-labelledby="t-stats">
+ <div class="card nums span"><div><b id="wk">-</b><span class="dim">hours, last 7 days</span></div><div><b id="tot">-</b><span class="dim">hours in total</span></div><div><b id="gms">-</b><span class="dim">games played</span></div></div>
  <div class="card"><h2>Most played</h2><div id="top"></div></div></div>
 
-<div id="p-more" role="tabpanel" aria-labelledby="t-more" class="hide">
+<div id="p-more" class="panel hide" role="tabpanel" aria-labelledby="t-more">
  <div class="card"><h2>Who is it for?</h2><p class="dim small">Changing this reloads the game menu on the TV. To switch back on the TV itself, enter your Kid Mode unlock code on the controller.</p>
  <div class="modes" role="group" aria-label="Viewing mode">
   <button class="mode" data-m="Full" aria-pressed="false"><span class="grow"><b>Full access</b><small>Everything, including settings</small></span><span class="tick">Current</span></button>
@@ -119,7 +140,7 @@ function msg(id,text,ok){$(id).textContent=text;$(id).className='msg '+(ok?'ok':
 function row(title,sub,right){return `<div class="row"><div class="grow"><span class="title">${esc(title)}</span><small class="dim">${esc(sub)}</small></div><span class="when">${right}</span></div>`}
 function show(which){$('login').classList.toggle('hide',which!='login');$('app').classList.toggle('hide',which!='app');if(which=='login')setTimeout(()=>$('pin').focus(),50)}
 async function start(){conn('','Connecting to Super RetroPie…');clearInterval(timer);
-  try{await refresh();show('app')}catch(e){if(e.pin){show('login');conn('ok','Connected - this phone needs pairing')}else conn('bad',e.message)}
+  try{await refresh();show('app')}catch(e){if(e.pin){show('login');conn('ok','Connected - this device needs pairing')}else conn('bad',e.message)}
   timer=setInterval(()=>{if(!$('app').classList.contains('hide'))refresh().catch(e=>{if(e.pin)show('login');else conn('bad','Connection lost - showing what we had at '+hhmm(lastOk))})},15000)}
 function togglePin(){const p=$('pin'),on=p.type=='password';p.type=on?'text':'password';$('pinshow').textContent=on?'Hide':'Show';$('pinshow').setAttribute('aria-pressed',on);p.focus()}
 async function login(){$('pinbtn').disabled=true;try{await api('/api/login',{method:'POST',body:JSON.stringify({pin:$('pin').value})});$('lmsg').textContent='';await refresh();show('app')}
@@ -138,7 +159,7 @@ async function refresh(){const [s,st,u]=await Promise.all([api('/api/status'),ap
   $('kidinfo').textContent=s.kid_games?'Games are marked from their genre (platform, puzzle, racing, sports, party, educational - not shooting, fighting, gambling or horror) on the TV in RetroPie menu › Kid Mode › Mark kid-friendly games. You can also mark single games there via Select › Edit this game\'s metadata › Kidgame.'
     :'Kid-friendly would show an empty menu. Mark games first on the TV: RetroPie menu › Kid Mode › Mark kid-friendly games.';
   $('wk').textContent=st.week_hours;$('tot').textContent=st.total_hours;$('gms').textContent=st.games;
-  $('recent').innerHTML=st.recent.map(r=>row(r.name,`${r.system} · ${r.minutes} min`,ago(r.end))).join('')||'<p class="empty">Nothing played yet. Games show up here once one has been played for a minute or more.</p>';
+  $('recent').innerHTML=st.recent.map(r=>row(r.name,`${r.system} · ${Math.max(1,r.minutes)} min`,ago(r.end))).join('')||'<p class="empty">Nothing played yet. Games show up here once one has been played for a minute or more.</p>';
   $('top').innerHTML=st.top.map(r=>row(r.name,r.system,'<b>'+played(r.secs)+'</b>')).join('')||'<p class="empty">No play time recorded yet. Your most-played games appear here as you play.</p>';
   const lab={importing:'Importing',ready:'Ready to play',failed:'Couldn\'t import'};
   $('ups').innerHTML=u.uploads.map(x=>`<div class="row"><div class="grow"><span class="title">${esc(x.name)}</span><small class="dim">${esc(x.system)} · ${esc(x.detail)}</small></div><span class="when st ${x.state}">${lab[x.state]}</span></div>`).join('')||'<p class="empty">Nothing uploaded from a phone yet. Files you upload are followed here until they are ready to play.</p>'}
