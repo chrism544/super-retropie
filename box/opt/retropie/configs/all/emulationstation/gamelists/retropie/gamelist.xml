@@ -188,8 +188,8 @@
 	</game>
 	<game>
 		<path>./companion.sh</path>
-		<name>Phone Companion</name>
-		<desc>Use your phone on the home Wi-Fi to see what is playing, Play Stats, add games, switch Kid mode and reload the menu. Shows the address, QR code and PIN.</desc>
+		<name>Control Center</name>
+		<desc>Super RetroPie Control Center - from a phone, tablet or computer on the home network: see what is playing, Play Stats, add games, switch Kid mode and reload the menu. Shows the address, QR code and PIN.</desc>
 		<image>./icons/wifi.png</image>
 		<genre>Settings</genre>
 		<playcount>1</playcount>
@@ -207,4 +207,4 @@
 		<playcount>4</playcount>
 		<lastplayed>20261020T225354</lastplayed>
 	</game>
-</gameList>
+<game><path>./advanced.sh</path><name>Advanced Settings</name><desc>Boot Screen, Network, Performance, RetroArch Net Play, game launch logs, RetroPie Setup and every RetroArch setting.</desc><image>./icons/rpsetup.png</image><genre>Settings</genre></game></gameList>

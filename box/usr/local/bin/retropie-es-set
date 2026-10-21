@@ -8,7 +8,7 @@ menu screen has closed (unless --now), hold the Openbox restart loop (/tmp/es-ho
 edit es_settings.cfg, release - ES comes straight back with the new settings.
 Detaches itself, so the caller can exit immediately.
 """
-import os, re, subprocess, sys, time
+import html, os, re, subprocess, sys, time
 
 CFG = os.path.expanduser('~/.emulationstation/es_settings.cfg')
 
@@ -17,9 +17,10 @@ def edit(pairs):
     for key, tv in pairs:
         typ, val = tv.split(':', 1)
         tag = {'int': 'int', 'bool': 'bool', 'string': 'string', 'float': 'float'}[typ]
+        val = html.escape(html.unescape(val))       # the file is XML: "start & end" -> "start &amp; end", never twice
         line = f'<{tag} name="{key}" value="{val}" />'
         pat = re.compile(r'<\w+ name="' + re.escape(key) + r'" value="[^"]*" />')
-        s = pat.sub(line, s) if pat.search(s) else s.replace('</config>', line + '\n</config>') if '</config>' in s else s + line + '\n'
+        s = pat.sub(lambda m: line, s) if pat.search(s) else s.replace('</config>', line + '\n</config>') if '</config>' in s else s + line + '\n'
     open(CFG, 'w').write(s)
 
 pairs = [a.split('=', 1) for a in sys.argv[1:] if '=' in a and not a.startswith('--')]

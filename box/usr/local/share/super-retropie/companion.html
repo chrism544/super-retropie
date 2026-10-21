@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070b10">
-<title>Super RetroPie Companion</title><style>
+<title>Super RetroPie Control Center</title><style>
 :root{--bg:#070b10;--panel:#0e1620;--line:#1c2a3a;--accent:#116a9d;--accent-lt:#40aae6;--text:#f7f7f7;--dim:#a3b3c2;--good:#5ac878;--warn:#e6b450;--bad:#ef7d7d;
   --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--sb:env(safe-area-inset-bottom,0px)}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}*{box-sizing:border-box}
@@ -46,6 +46,20 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
 .msg{min-height:1.4em;margin-top:8px}.note{font-size:.875rem;color:var(--warn);margin-top:8px}.empty{color:var(--dim);font-size:.95rem}
 .sum{margin-top:12px;padding:10px 12px;border-radius:10px;background:#05080c;font-size:.9rem}
 .hide{display:none!important}
+.pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:4px}
+.pic{padding:0;border:2px solid var(--line);border-radius:10px;background:#05080c;color:var(--text);font:inherit;font-size:.8rem;overflow:hidden;text-align:left}
+.pic img,.pic .nopic{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#000}.pic .nopic{display:flex;align-items:center;justify-content:center;color:var(--dim)}.pic span{display:block;padding:6px 8px}
+.pic[aria-checked=true]{border-color:var(--accent-lt);background:#0b2233}.pic[aria-checked=true] span:after{content:" ✓";color:var(--accent-lt)}
+.sel{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#05080c;color:var(--text);font:inherit}
+.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{flex:1;min-width:64px;min-height:44px;border-radius:999px;border:2px solid var(--line);background:#05080c;color:var(--text);font:inherit;font-size:.9rem}
+.seg button[aria-pressed=true]{border-color:var(--accent-lt);background:#0b2233;font-weight:600}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line);font-size:.95rem}.kv:first-child{border-top:0}.kv span:last-child{text-align:right;word-break:break-all}
+pre.log{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;background:#05080c;border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,monospace;color:var(--dim);margin:8px 0 0}
+.prob{font:12px/1.5 ui-monospace,monospace;color:var(--warn);word-break:break-word}
+@media (max-width:399px){nav button{font-size:.7rem}}
+.gopts{display:grid;gap:4px 20px}.gopt{padding:10px 0;border-top:1px solid var(--line)}.gopt:first-child{border-top:0}
+.gopt label{margin:0 0 4px}.gopt p{margin:0 0 6px;font-size:.85rem;color:var(--dim)}
+@media (min-width:900px){.gopts{grid-template-columns:1fr 1fr}.gopt:nth-child(2){border-top:0}}
 /* tablets: a wider single column */
 @media (min-width:640px){.wrap{max-width:760px;padding:0 24px}nav div{max-width:760px}}
 /* laptops and desktops: tabs along the top, two columns per tab */
@@ -69,12 +83,11 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
 @media (min-width:1400px){.wrap{max-width:1280px}nav div{max-width:1216px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (orientation:landscape) and (max-height:500px){nav button span{display:none}nav button{min-height:44px}main{padding-bottom:calc(72px + var(--sb))}}
-</style></head><body>
-<header class="wrap"><small>SUPER RETROPIE</small><h1>Companion</h1>
+<header class="wrap"><h1>Super RetroPie Control Center</h1>
 <div id="conn" class="conn" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="conntext">Connecting to Super RetroPie…</span><button id="retry" class="pill hide" onclick="start()">Retry</button></div></header>
 
 <section id="login" class="wrap hide"><main class="login"><div class="card"><h2>Pair this device</h2>
-<p class="dim">Enter the PIN shown on the TV: RetroPie menu › Phone Companion.</p>
+<p class="dim">Enter the PIN shown on the TV: RetroPie menu › Control Center.</p>
 <label for="pin">4-digit PIN</label>
 <div class="pinrow"><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code"><button id="pinshow" class="pill" type="button" aria-pressed="false" onclick="togglePin()">Show</button></div>
 <button id="pinbtn" class="btn" onclick="login()">Connect</button><div id="lmsg" class="msg err" role="alert"></div></div></main></section>
@@ -107,6 +120,26 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
  <div class="card"><h2>Most played</h2><div id="top"></div></div></div>
 
 <div id="p-more" class="panel hide" role="tabpanel" aria-labelledby="t-more">
+ <div class="card span"><h2>Game settings</h2><p class="dim small">How games look and play - for every console, or one console on its own. Changes apply from the next game you start.</p>
+  <label for="gscope">Console</label><select id="gscope" class="sel"></select>
+  <div id="gopts" class="gopts"></div><div id="gmsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Game artwork</h2><p class="dim small">The decorative frame around the picture in retro games.</p>
+  <span class="lbl" id="awsl">Style</span><div class="seg" role="group" aria-labelledby="awsl" id="awstyle"></div>
+  <span class="lbl" id="awbl">Brightness</span><div class="seg" role="group" aria-labelledby="awbl" id="awbright"></div>
+  <div id="awmsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Menu music</h2><p id="mutracks" class="dim small"></p>
+  <span class="lbl" id="muonl">Music in the menus</span><div class="seg" role="group" aria-labelledby="muonl" id="muon"></div>
+  <span class="lbl" id="muvoll">Volume</span><div class="seg" role="group" aria-labelledby="muvoll" id="muvol"></div>
+  <div id="mumsg" class="msg" role="alert"></div></div>
+ <div class="card span"><h2>Screensaver</h2><p class="dim small">What the TV shows when the game menu is left alone. Saving reloads the menu on the TV.</p>
+  <div class="gopts">
+   <div><label for="ssb">Style</label><select id="ssb" class="sel"><option value="dim">Dim the screen</option><option value="black">Black screen</option><option value="slideshow">Game pictures</option><option value="random video">Game videos</option></select></div>
+   <div><label for="sst">Start after</label><select id="sst" class="sel"><option value="60000">1 minute</option><option value="180000">3 minutes</option><option value="300000">5 minutes</option><option value="600000">10 minutes</option><option value="900000">15 minutes</option><option value="1800000">30 minutes</option><option value="0">Never</option></select></div>
+   <div><label for="sss">Change picture every</label><select id="sss" class="sel"><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="20000">20 seconds</option><option value="30000">30 seconds</option></select></div>
+   <div><label for="ssi">Show game name</label><select id="ssi" class="sel"><option value="never">Never</option><option value="start &amp; end">Briefly</option><option value="always">Always</option></select></div>
+   <div><label for="ssm">Video sound</label><select id="ssm" class="sel"><option value="false">On</option><option value="true">Off</option></select></div>
+  </div><p id="ssvid" class="dim small" style="margin-top:8px"></p>
+  <button id="sssave" class="btn" onclick="saveSaver()">Save screensaver</button><div id="ssmsg" class="msg" role="alert"></div></div>
  <div class="card"><h2>Who is it for?</h2><p class="dim small">Changing this reloads the game menu on the TV. To switch back on the TV itself, enter your Kid Mode unlock code on the controller.</p>
  <div class="modes" role="group" aria-label="Viewing mode">
   <button class="mode" data-m="Full" aria-pressed="false"><span class="grow"><b>Full access</b><small>Everything, including settings</small></span><span class="tick">Current</span></button>
@@ -115,12 +148,37 @@ button{cursor:pointer}.btn{display:block;width:100%;min-height:48px;padding:12px
  </div><p id="kidinfo" class="dim small" style="margin-top:10px"></p><div id="kmsg" class="msg" role="alert"></div></div>
  <div class="card"><h2>Game menu</h2><p class="dim small">Reload the game menu on the TV, for example after copying games over the network.</p>
  <button id="reloadbtn" class="btn alt" onclick="reloadMenu()">Reload menu</button><div id="rmsg" class="msg" role="alert"></div></div></div>
+
+<div id="p-adv" class="panel hide" role="tabpanel" aria-labelledby="t-adv">
+ <p id="advload" class="dim span" style="margin-top:12px">Loading…</p>
+ <div class="card"><h2>Boot screen</h2><p class="dim small">The picture shown while the box starts and the game menu loads.</p>
+  <div id="pics" class="pics" role="radiogroup" aria-label="Boot picture"></div>
+  <label for="bsound">Loading sound</label><select id="bsound" class="sel"></select>
+  <span class="lbl" id="bvoll">Volume</span><div class="seg" role="group" aria-labelledby="bvoll" id="bvol"></div>
+  <span class="lbl" id="bwhenl">Play the sound</span><div class="seg" role="group" aria-labelledby="bwhenl" id="bwhen"></div>
+  <button id="bsave" class="btn" onclick="saveBoot()">Save boot screen</button><div id="bmsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Performance</h2><p id="plive" class="dim small" aria-live="polite"></p>
+  <div class="modes" role="group" aria-label="Power mode" id="pmodes"></div>
+  <span class="lbl" id="xemul">Xbox emulator updates</span><div class="seg" role="group" aria-labelledby="xemul" id="xemu"></div>
+  <p id="xemuinfo" class="dim small" style="margin-top:8px"></p><div id="pmsg" class="msg" role="alert"></div></div>
+ <div class="card"><h2>Network</h2><div id="netrows"></div>
+  <p class="dim small" style="margin-top:10px">To switch between automatic and a fixed address, use the TV: RetroPie menu › Advanced Settings › Network. It undoes a wrong change by itself after a minute.</p></div>
+ <div class="card"><h2>RetroArch Net Play</h2><p class="dim small">Play retro games online with a friend. Save these, then start a game and choose Net Play in its launch options (press A while it loads).</p>
+  <span class="lbl" id="npml">This box will</span><div class="seg" role="group" aria-labelledby="npml" id="npmode"></div>
+  <div id="nphostrow"><label for="nphost">Host's address</label><input id="nphost" type="text" inputmode="decimal" autocomplete="off"></div>
+  <label for="npport">Port</label><input id="npport" type="text" inputmode="numeric" autocomplete="off">
+  <label for="npnick">Nickname</label><input id="npnick" type="text" maxlength="16" autocomplete="off" aria-describedby="npnickh"><p id="npnickh" class="dim small" style="margin-top:4px">Up to 16 letters, numbers, - or _</p>
+  <button id="npsave" class="btn" onclick="saveNetplay()">Save Net Play</button><div id="npmsg" class="msg" role="alert"></div></div>
+ <div class="card span"><h2>Game launch logs</h2><p class="dim small">What happened each time a game was started - look here when a game won't start or closes straight away.</p><div id="logs"></div></div>
+ <div class="card span"><h2>On the TV only</h2><p class="dim small">These are RetroPie's own text menus, so they're used with the controller: RetroPie menu › Advanced Settings › <b>RetroPie Setup</b> (install or update emulators and RetroPie) and <b>All RetroArch settings</b>.</p></div>
+</div>
 </main>
 <nav aria-label="Sections"><div role="tablist">
  <button role="tab" id="t-now" aria-controls="p-now" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/></svg><span>Now</span></button>
  <button role="tab" id="t-upload" aria-controls="p-upload" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Add games</span></button>
  <button role="tab" id="t-stats" aria-controls="p-stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Stats</span></button>
  <button role="tab" id="t-more" aria-controls="p-more" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Settings</span></button>
+ <button role="tab" id="t-adv" aria-controls="p-adv" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Advanced</span></button>
 </div></nav></section>
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -129,7 +187,7 @@ let S=null,busy=false,timer=null,lastOk=0,sys=null,queue=[],seq=0;
 async function api(p,o={}){o.headers=Object.assign({'X-SRP':'1'},o.headers||{});let r;
   try{r=await fetch(p,o)}catch(e){const x=new Error('Can\'t reach the box - is this phone on the home Wi-Fi?');x.net=true;throw x}
   const j=await r.json().catch(()=>({}));if(r.status==401){const x=new Error('pin');x.pin=true;throw x}
-  if(r.status==403&&j.error=='off'){const x=new Error('The phone page is switched off on the TV (RetroPie menu › Phone Companion)');x.net=true;throw x}
+  if(r.status==403&&j.error=='off'){const x=new Error('The phone page is switched off on the TV (RetroPie menu › Control Center)');x.net=true;throw x}
   if(!r.ok)throw new Error(j.error||'Something went wrong');return j}
 function conn(state,text){$('conn').className='conn '+state;$('conntext').textContent=text;$('retry').classList.toggle('hide',state!='bad')}
 const hhmm=t=>new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -219,7 +277,59 @@ document.querySelectorAll('[data-m]').forEach(b=>b.onclick=async()=>{if(b.getAtt
 async function reloadMenu(){const b=$('reloadbtn');b.disabled=true;b.textContent='Reloading menu…';
   try{msg('rmsg',(await api('/api/reload',{method:'POST'})).message,true)}catch(e){msg('rmsg',e.message)}finally{setTimeout(()=>{b.disabled=false;b.textContent='Reload menu'},5000)}}
 
-document.querySelectorAll('[role=tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(x=>{x.setAttribute('aria-selected',x==b);$(x.getAttribute('aria-controls')).classList.toggle('hide',x!=b)});window.scrollTo(0,0)});
+/* ---- Advanced (same tools as RetroPie menu > Advanced Settings) ---- */
+let ADV=null,boot={},np={},advTimer=null;
+const post=(p,d)=>api(p,{method:'POST',body:JSON.stringify(d)});
+function seg(id,opts,cur,onpick){$(id).innerHTML=opts.map(([v,l])=>`<button type="button" aria-pressed="${v===cur}" data-v="${esc(String(v))}">${esc(l)}</button>`).join('');
+  $(id).querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{$(id).querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x==b));onpick(opts[i][0])})}
+function kv(k,v){return `<div class="kv"><span class="dim">${esc(k)}</span><span>${v}</span></div>`}
+async function loadAdv(full){try{ADV=await api('/api/adv/all');$('advload').classList.add('hide')}catch(e){$('advload').textContent=e.message;return}
+  const p=ADV.perf;$('plive').textContent='Right now: '+[p.temp!=null?p.temp+' °C':'',p.fan!=null?'fan '+p.fan+' rpm':'',p.ghz!=null?p.ghz+' GHz average':''].filter(Boolean).join(' · ');
+  $('pmodes').innerHTML=p.modes.map(m=>`<button class="mode" data-w="${m.w}" aria-pressed="${m.w==p.watts}"><span class="grow"><b>${esc(m.name)} (${m.w} W)</b><small>${esc(m.desc)}</small></span><span class="tick">Current</span></button>`).join('');
+  $('pmodes').querySelectorAll('[data-w]').forEach(b=>b.onclick=async()=>{if(b.getAttribute('aria-pressed')=='true')return;const all=$('pmodes').querySelectorAll('button');all.forEach(x=>x.disabled=true);
+    msg('pmsg','Changing power mode…',true);try{await post('/api/adv/perf',{watts:+b.dataset.w});all.forEach(x=>x.setAttribute('aria-pressed',x==b));msg('pmsg','Power mode changed.',true)}catch(e){msg('pmsg',e.message)}finally{all.forEach(x=>x.disabled=false)}});
+  seg('xemu',[[true,'Automatic'],[false,'Off']],p.xemu_auto,async v=>{try{await post('/api/adv/perf',{xemu_auto:v});msg('pmsg',v?'Xbox emulator updates on.':'Xbox emulator updates off - xemu stays on this version.',true)}catch(e){msg('pmsg',e.message)}});
+  $('xemuinfo').textContent=`Installed: xemu ${p.xemu_version}.${p.xemu_checked?' Last check: '+p.xemu_checked+'.':''} Checks nightly at about 4:30 and only updates when nothing is playing.`;
+  const n=ADV.net;$('netrows').innerHTML=kv('Status',n.internet?'<span class="ok">Online</span>':'<span class="err">No internet</span>')+kv('Address',esc(n.address||'Not connected'))+kv('Type',esc(n.mode+' · '+n.kind+(n.iface?' ('+n.iface+')':'')))
+    +(n.address?kv('Mask / gateway',esc(n.mask+' / '+(n.gateway||'none')))+kv('DNS',esc(n.dns||'none')):'')+(n.speed?kv('Link speed',n.speed>=1000?esc(n.speed/1000+' Gbit/s'):`<span class="warn">${esc(n.speed+' Mbit/s')}</span>`)
+      +(n.speed<1000&&n.kind=='Wired'?'<p class="warn small" style="margin:4px 0 0">Slower than it should be - this box can do 1 Gbit/s. Check the network cable and the switch or router port it is plugged into.</p>':''):'')
+    +(n.tailscale?kv('Tailscale',esc(n.tailscale)):'')+(n.mac?kv('MAC',esc(n.mac)):'');
+  if(!full)return;
+  boot={style:ADV.boot.style,sound:ADV.boot.sound,volume:ADV.boot.volume,when:ADV.boot.when};
+  $('pics').innerHTML=ADV.boot.styles.map(s=>`<button type="button" class="pic" role="radio" aria-checked="${s.id==boot.style}" data-s="${esc(s.id)}">${s.id=='off'?'<div class="nopic">No picture</div>':`<img loading="lazy" alt="" src="/api/adv/bootpic?s=${encodeURIComponent(s.id)}">`}<span>${esc(s.name)}</span></button>`).join('');
+  $('pics').querySelectorAll('.pic').forEach(b=>b.onclick=()=>{boot.style=b.dataset.s;$('pics').querySelectorAll('.pic').forEach(x=>x.setAttribute('aria-checked',x==b))});
+  $('bsound').innerHTML=ADV.boot.sounds.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');$('bsound').value=boot.sound;$('bsound').onchange=()=>boot.sound=$('bsound').value;
+  seg('bvol',[[25,'25%'],[50,'50%'],[75,'75%'],[100,'100%']],boot.volume,v=>boot.volume=v);
+  seg('bwhen',[['startup','Start-up only'],['always','Every menu reload']],boot.when,v=>boot.when=v);
+  np=Object.assign({},ADV.netplay);$('nphost').value=np.host;$('npport').value=np.port;$('npnick').value=np.nick;
+  const hostrow=()=>{$('nphostrow').classList.toggle('hide',np.mode!='C')};seg('npmode',[['H','Host a game'],['C','Join a friend']],np.mode,v=>{np.mode=v;hostrow()});hostrow();
+  $('logs').innerHTML=ADV.logs.map(l=>`<div class="row" style="align-items:flex-start"><div class="grow"><span class="title">${esc(l.game)}</span><small class="dim">${esc(l.system)} · ${esc(l.emulator)} · ${esc(l.ended)}</small>
+    ${l.problems.map(p=>`<div class="prob">${esc(p)}</div>`).join('')}<div id="lg-${esc(l.file)}"></div></div><button class="lnk" onclick="viewLog('${esc(l.file)}',this)">View log</button></div>`).join('')||'<p class="empty">No games started yet. A log is kept for each game you start.</p>'}
+async function viewLog(f,b){const box=$('lg-'+f);if(box.innerHTML){box.innerHTML='';b.textContent='View log';return}
+  b.textContent='Loading…';try{const r=await fetch('/api/adv/log?f='+encodeURIComponent(f));box.innerHTML=`<pre class="log">${esc(await r.text())}</pre>`;b.textContent='Hide log'}catch(e){b.textContent='View log'}}
+async function saveBoot(){$('bsave').disabled=true;msg('bmsg','Saving…',true);try{msg('bmsg',(await post('/api/adv/boot',boot)).message,true)}catch(e){msg('bmsg',e.message)}finally{$('bsave').disabled=false}}
+async function saveNetplay(){np.host=$('nphost').value.trim();np.port=$('npport').value.trim();np.nick=$('npnick').value.trim();$('npsave').disabled=true;
+  try{msg('npmsg',(await post('/api/adv/netplay',np)).message,true)}catch(e){msg('npmsg',e.message)}finally{$('npsave').disabled=false}}
+/* ---- Settings tab: game settings, artwork, music, screensaver ---- */
+async function loadSettings(scope){let S2;try{S2=await api('/api/adv/settings?scope='+encodeURIComponent(scope||$('gscope').value||'all'))}catch(e){msg('gmsg',e.message);return}
+  const g=S2.game;$('gscope').innerHTML=g.consoles.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');$('gscope').value=g.scope;
+  $('gopts').innerHTML=g.options.map(o=>`<div class="gopt"><label for="go-${o.id}">${esc(o.label)}</label><p>${esc(o.desc)}</p><select id="go-${o.id}" class="sel" data-id="${o.id}">${o.choices.map(c=>`<option value="${esc(c.v)}"${c.v==o.value?' selected':''}${c.v=='other'?' disabled':''}>${esc(c.l)}</option>`).join('')}</select></div>`).join('');
+  $('gopts').querySelectorAll('select').forEach(s=>s.onchange=async()=>{s.disabled=true;try{msg('gmsg',(await post('/api/adv/game',{scope:g.scope,id:s.dataset.id,value:s.value})).message,true)}catch(e){msg('gmsg',e.message)}finally{s.disabled=false}});
+  const a=S2.artwork,artPost=async d=>{try{msg('awmsg',(await post('/api/adv/artwork',d)).message,true)}catch(e){msg('awmsg',e.message)}};
+  seg('awstyle',[['fit','Fit whole game'],['original','Original'],['off','No artwork']],a.style,v=>artPost({style:v}));
+  seg('awbright',[['dim','Dimmed'],['full','Full']],a.bright,v=>artPost({bright:v}));
+  const m=S2.music,musPost=async d=>{try{msg('mumsg',(await post('/api/adv/music',d)).message,true)}catch(e){msg('mumsg',e.message)}};
+  $('mutracks').textContent=m.tracks?`${m.tracks} track${m.tracks==1?'':'s'} in the music folder - add your own to \\\\super-retropie\\music on the network.`:'No music yet - add tracks to the music folder.';
+  seg('muon',[[true,'On'],[false,'Off']],m.on,v=>musPost({on:v}));
+  seg('muvol',[[10,'10%'],[20,'20%'],[35,'35%'],[50,'50%'],[70,'70%'],[100,'100%']],m.volume,v=>musPost({volume:v}));
+  const s=S2.screensaver;$('ssb').value=s.ScreenSaverBehavior;$('sst').value=s.ScreenSaverTime;$('sss').value=s.ScreenSaverSwapMediaTimeout;$('ssi').value=s.ScreenSaverGameInfo;$('ssm').value=s.ScreenSaverVideoMute;
+  $('ssvid').textContent=s.videos?`${s.videos} games have a video for the Game videos style.`:'No game videos yet - Game videos shows game pictures until you get some (on the TV: RetroPie menu › Screensaver › Get videos).'}
+$('gscope').onchange=()=>loadSettings($('gscope').value);
+async function saveSaver(){const b=$('sssave');b.disabled=true;msg('ssmsg','Saving - the TV menu reloads…',true);
+  try{msg('ssmsg',(await post('/api/adv/screensaver',{ScreenSaverBehavior:$('ssb').value,ScreenSaverTime:$('sst').value,ScreenSaverSwapMediaTimeout:$('sss').value,ScreenSaverGameInfo:$('ssi').value,ScreenSaverVideoMute:$('ssm').value})).message,true)}
+  catch(e){msg('ssmsg',e.message)}finally{setTimeout(()=>b.disabled=false,3000)}}
+document.querySelectorAll('[role=tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(x=>{x.setAttribute('aria-selected',x==b);$(x.getAttribute('aria-controls')).classList.toggle('hide',x!=b)});window.scrollTo(0,0);
+  clearInterval(advTimer);if(b.id=='t-adv'){loadAdv(true);advTimer=setInterval(()=>loadAdv(false),15000)}if(b.id=='t-more')loadSettings()});
 $('pin').addEventListener('keydown',e=>{if(e.key=='Enter')login()});
 start();
 </script></body></html>

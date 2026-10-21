@@ -13,9 +13,13 @@ No games, BIOS files, keys or saves are included - bring your own.
   launch screen to start a game fresh instead (the resume point is kept as a backup; saves untouched).
 - **CRT look** - subtle scanlines on the 8/16-bit and arcade consoles; change per console in
   RetroPie menu > Configuration Editor > Screen effect.
-- **Phone Companion** - open `http://<box address>:8080` in any browser on your home network (or scan
-  the QR code in RetroPie menu > Phone Companion) and enter the PIN shown on the TV: what's playing,
-  Play Stats, upload games into the drop folder, Kid mode, reload the menu.
+- **Super RetroPie Control Center** - open `http://<box address>:8080` in any browser on a phone,
+  tablet or computer on your home network (or scan the QR code in RetroPie menu > Control Center) and
+  enter the PIN shown on the TV: what's playing, Play Stats, upload games, viewing mode, game settings
+  per console, artwork, screensaver, menu music, and the Advanced Settings tools (boot screen,
+  performance, network status, RetroArch Net Play, game launch logs).
+- **Advanced Settings** on the TV menu - Boot Screen, Network, Performance, RetroArch Net Play,
+  game launch logs, RetroPie Setup and every RetroArch setting.
 - Themed menus, Search, Save Manager with cheats, launch and boot screens, manuals, menu music,
   Xbox / Xbox 360 / Wii U launchers, Sunshine streaming, nightly artwork scraping and backups.
 

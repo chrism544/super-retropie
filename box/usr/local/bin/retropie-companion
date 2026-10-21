@@ -327,5 +327,10 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     load_cfg()
+    try:                                            # Advanced tab: /api/adv/ (companion_advanced.py)
+        import sys; sys.path.insert(0, '/usr/local/lib/retropie'); import companion_advanced
+        companion_advanced.install(Handler)
+    except Exception as e:
+        print('advanced not loaded:', e, flush=True)
     ThreadingHTTPServer.daemon_threads = True
     ThreadingHTTPServer(('', PORT), Handler).serve_forever()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RetroPie menu > Phone Companion: switch the phone page on/off, show its address, QR code and PIN."""
+"""RetroPie menu > Control Center: switch the Super RetroPie Control Center web page on/off, show its address, QR code and PIN."""
 import json, os, secrets, socket, subprocess, sys
 sys.path.insert(0, '/usr/local/lib/retropie')
 import retropie_ui as ui
@@ -73,4 +73,4 @@ rows = [
              'Only works on your home network, and asks for the PIN.'},
     {'label': 'New PIN', 'action': new_pin, 'desc': 'Makes a new PIN. Any phone that was connected has to enter the new one.'},
 ]
-ui.options_screen('SETTINGS', 'Phone Companion', rows, change, card)
+ui.options_screen('SETTINGS', 'Control Center', rows, change, card)
