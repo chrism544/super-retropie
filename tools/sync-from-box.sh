@@ -51,6 +51,12 @@ scp -q -o BatchMode=yes "$BOX:/tmp/srp-public.tar.gz" "$TMP/public.tar.gz"
 
 echo "== secret check"
 mkdir "$TMP/box" && tar -C "$TMP/box" -xzf "$TMP/public.tar.gz" --no-same-owner
+# a broken snapshot must never look like "delete everything" (Oct 2026: a CRLF checkout produced an
+# empty one and staged 782 deletions)
+have=$(git ls-files box | wc -l); got=$(find "$TMP/box" -type f | wc -l)
+if [ "$got" -lt 300 ] || [ "$got" -lt $(( have * 3 / 4 )) ]; then
+    echo "!! snapshot has only $got files (the repo has $have) - looks broken, nothing changed"; exit 4
+fi
 if grep -rIlE 'BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{20}|psk *[:=]|(password|token|api_?key) *[:=] *["'"'"'][^"'"'"'_$]{4,}' "$TMP/box"; then
     echo "!! possible secret in the files above - nothing changed"; exit 1
 fi

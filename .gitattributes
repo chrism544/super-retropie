@@ -1,0 +1,4 @@
+# Everything runs on Linux (the box, Proxmox): always check text files out with LF line endings,
+# even on Windows - a CRLF checkout broke the scripts piped to the box (Oct 2026).
+* text=auto eol=lf
+*.ps1 text eol=crlf
