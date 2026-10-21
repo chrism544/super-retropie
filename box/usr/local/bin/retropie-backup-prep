@@ -1,0 +1,10 @@
+#!/bin/sh
+# Copies the root-only network settings to /var/backups/super-retropie-etc/, where the nightly Proxmox
+# backup (read-only, as pi) can read them. The installer file with the login password hash
+# (cloud.cfg.d/99-installer.cfg) is deliberately left out.
+set -e
+D=/var/backups/super-retropie-etc
+rm -rf "$D"; mkdir -p "$D/etc/netplan" "$D/etc/cloud/cloud.cfg.d"
+cp -p /etc/netplan/*.yaml "$D/etc/netplan/"
+[ -f /etc/cloud/cloud.cfg.d/90-installer-network.cfg ] && cp -p /etc/cloud/cloud.cfg.d/90-installer-network.cfg "$D/etc/cloud/cloud.cfg.d/"
+chown -R root:pi "$D"; chmod -R u=rwX,g=rX,o= "$D"

@@ -155,10 +155,12 @@ def make_preview(style, bright):
 
 held, rep = None, 0
 clock = pygame.time.Clock()
+exposed, drawn = True, 0
 while True:
     acts = []
     for e in pygame.event.get():
         if e.type == pygame.QUIT: sys.exit(0)
+        if e.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED, pygame.WINDOWFOCUSGAINED, pygame.WINDOWRESTORED): exposed = True
         if time.time() < ignore: continue
         if e.type == pygame.JOYBUTTONDOWN:
             acts.append({0: 'a', 1: 'b'}.get(e.button))
@@ -183,6 +185,10 @@ while True:
             s[key] = val
             os.makedirs(os.path.dirname(STATE), exist_ok=True); json.dump(s, open(STATE, 'w'))
             msg = f'Saved - {apply(s)} games updated. Takes effect next time a game starts.'
+    # redraw only when something changed (drawing every frame kept a core busy while left open)
+    if not any(acts) and not exposed and time.time() - drawn < 2 and not os.environ.get('BEZEL_SHOT'):
+        clock.tick(30); continue
+    exposed, drawn = False, time.time()
     if BG: screen.blit(BG, (0, 0))
     else: screen.fill((0, 0, 0))
     text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))

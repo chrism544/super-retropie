@@ -1,0 +1,6 @@
+[Unit]
+Description=Copy root-only network settings where the nightly Proxmox backup can read them
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/retropie-backup-prep

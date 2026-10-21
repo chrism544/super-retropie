@@ -14,7 +14,11 @@ BOX=pi@10.5.0.19; PUSH=0
 for a in "$@"; do case $a in --push) PUSH=1 ;; *@*) BOX=$a ;; esac; done
 ROOT=$(git rev-parse --show-toplevel); cd "$ROOT"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-SSH=(ssh -o BatchMode=yes "$BOX")
+SSH=(ssh -o BatchMode=yes -o ConnectTimeout=15 "$BOX")
+
+"${SSH[@]}" true 2>/dev/null || { echo "box $BOX not reachable - nothing synced"; exit 2; }
+# building the snapshot keeps a core busy for a minute - never while someone is playing
+"${SSH[@]}" /usr/local/bin/retropie-game-running && { echo "someone is using the TV - nothing synced, try later"; exit 3; }
 
 echo "== snapshot on $BOX"
 "${SSH[@]}" 'bash -s' < tools/build-super-retropie-kit.sh | tail -2

@@ -115,7 +115,11 @@ inp = ui.Input(); sel, top, ROWS = 0, 0, 11
 mode, sub, msg, confirm = 'list', 0, '', None
 clock = pygame.time.Clock()
 while True:
-    for a in inp.read():
+    acts = inp.read()
+    # redraw only when something changed - it re-read the save folders 30 times a second (Oct 2026)
+    if not acts and not inp.redraw_due(2):
+        clock.tick(30); continue
+    for a in acts:
         if mode == 'list':
             if a == 'up': sel = max(0, sel - 1)
             elif a == 'down': sel = min(len(games) - 1, sel + 1)

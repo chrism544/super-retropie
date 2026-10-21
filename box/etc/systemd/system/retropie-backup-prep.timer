@@ -1,0 +1,10 @@
+[Unit]
+Description=Before the nightly Proxmox backup (03:30), and after start-up
+
+[Timer]
+OnCalendar=*-*-* 03:15
+OnBootSec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

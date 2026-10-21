@@ -1,8 +1,9 @@
 [Unit]
-Description=Nightly backup of Super RetroPie
+Description=Nightly backup of Super RetroPie (retries hourly through the day if the box was off)
 
 [Timer]
 OnCalendar=*-*-* 03:30
+OnCalendar=*-*-* 06..23:30
 Persistent=true
 RandomizedDelaySec=5min
 

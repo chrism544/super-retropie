@@ -90,6 +90,13 @@ class Input:
         self.pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
         self.ignore = time.time() + 0.6               # the A press that opened the screen
         self.held, self.rep, self.axes = None, 0, {}
+        self.drawn, self.exposed = 0, True
+    def redraw_due(self, every):
+        """For screens that only redraw on change: True when the window was uncovered or `every` s passed."""
+        if self.exposed or time.time() - self.drawn >= every:
+            self.exposed, self.drawn = False, time.time()
+            return True
+        return False
     def _dir(self, d, out):
         if d != self.held:
             self.held, self.rep = d, time.time() + 0.45
@@ -98,6 +105,8 @@ class Input:
         out = []
         for e in pygame.event.get():
             if e.type == pygame.QUIT: sys.exit(0)
+            if e.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED, pygame.WINDOWFOCUSGAINED, pygame.WINDOWRESTORED):
+                self.exposed = True
             if e.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
                 self.pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
             if time.time() < self.ignore: continue
@@ -125,7 +134,12 @@ def options_screen(section, title, rows, on_change=None, preview=None, sub='', f
     inp = Input(); sel, msg, top = 0, '', 0
     clock = pygame.time.Clock()
     while True:
-        for a in inp.read():
+        acts = inp.read()
+        # Redraw only when something changed. Drawing every frame cost 20-30% CPU for as long as a
+        # screen was left open (Oct 2026). Live previews (temperatures...) refresh once a second.
+        if not (acts or inp.redraw_due(1 if preview else 2)):
+            clock.tick(30); continue
+        for a in acts:
             row = rows[sel]
             if a == 'up': sel = (sel - 1) % len(rows); msg = ''
             elif a == 'down': sel = (sel + 1) % len(rows); msg = ''

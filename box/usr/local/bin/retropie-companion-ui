@@ -39,19 +39,23 @@ def qr_surface(size):
     except Exception:
         return None
 
+_card = {}
 def card(i, v):
+    key = (c['on'], c['pin'])                     # built once - the QR code is slow to draw
+    if key in _card: return _card[key]
     w, h = ui.px(860), ui.px(420)
     s = pygame.Surface((w, h)); s.fill(ui.PANEL)
     if not c['on']:
-        t = ui.font(34).render('The phone page is off', True, ui.DIM); s.blit(t, t.get_rect(center=(w // 2, h // 2)))
-        return s
-    q = qr_surface(ui.px(360))
-    if q: s.blit(q, q.get_rect(midleft=(ui.px(30), h // 2)))
-    x = ui.px(430)
-    for txt, size, col, y in (('Scan, or open on your phone:', 26, ui.DIM, 60), (url, 30, ui.TEXT, 100),
-                              ('PIN', 26, ui.DIM, 200), (c['pin'], 72, ui.ACCENT_LT, 235),
-                              ('Phone on the same Wi-Fi', 24, ui.DIM, 345)):
-        s.blit(ui.font(size).render(txt, True, col), (x, ui.px(y)))
+        t = ui.font(34).render('The Control Center page is off', True, ui.DIM); s.blit(t, t.get_rect(center=(w // 2, h // 2)))
+    else:
+        q = qr_surface(ui.px(360))
+        if q: s.blit(q, q.get_rect(midleft=(ui.px(30), h // 2)))
+        x = ui.px(430)
+        for txt, size, col, y in (('Scan, or open in a browser:', 26, ui.DIM, 60), (url, 30, ui.TEXT, 100),
+                                  ('PIN', 26, ui.DIM, 200), (c['pin'], 72, ui.ACCENT_LT, 235),
+                                  ('Phone, tablet or computer on your home network', 22, ui.DIM, 345)):
+            s.blit(ui.font(size).render(txt, True, col), (x, ui.px(y)))
+    _card.clear(); _card[key] = s
     return s
 
 def new_pin():

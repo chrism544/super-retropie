@@ -5,3 +5,5 @@ usb/nocloud/retropie/super-retropie/files-list.txt
 *.iso
 *.pub
 id_*
+# weekly sync report (tools/weekly-sync.sh)
+sync-report.txt

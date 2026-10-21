@@ -153,10 +153,12 @@ def change(step):
         write(cfg_path(scope), opt[3][new], remove=allkeys - set(opt[3][new]))
     msg = 'Saved - applies from the next game you start'
 
+exposed, drawn = True, 0
 while True:
     acts = []
     for e in pygame.event.get():
         if e.type == pygame.QUIT: sys.exit(0)
+        if e.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED, pygame.WINDOWFOCUSGAINED, pygame.WINDOWRESTORED): exposed = True
         if time.time() < ignore: continue
         if e.type == pygame.JOYBUTTONDOWN:
             acts.append({0: 'a', 1: 'b', 4: 'lb', 5: 'rb'}.get(e.button))
@@ -185,6 +187,10 @@ while True:
         elif a in ('a', 'right'): change(1)
         elif a == 'left': change(-1)
 
+    # redraw only when something changed - drawing every frame cost ~22% CPU while left open (Oct 2026)
+    if not any(acts) and not exposed and time.time() - drawn < 2 and not shot:
+        clock.tick(30); continue
+    exposed, drawn = False, time.time()
     screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
     text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
     text('Game Settings', 56, TEXT, (px(80), px(95)))

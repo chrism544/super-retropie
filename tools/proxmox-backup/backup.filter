@@ -61,7 +61,8 @@
 + /etc/emulationstation/themes/bluray/***
 - /etc/emulationstation/themes/*
 + /etc/emulationstation/***
-+ /etc/netplan/***
+# netplan is root-only: read from /var/backups/super-retropie-etc instead (below)
+- /etc/netplan/
 + /etc/samba/
 + /etc/samba/smb.conf
 + /etc/udev/
@@ -74,6 +75,9 @@
 + /etc/systemd/system/*.wants/retropie-*
 + /etc/default/
 + /etc/default/grub
+# installer leftovers incl. the login password hash - never backed up; the network one is copied below
+- /etc/cloud/cloud.cfg.d/99-installer.cfg
+- /etc/cloud/cloud.cfg.d/90-installer-network.cfg
 + /etc/cloud/
 + /etc/cloud/cloud.cfg.d/***
 + /etc/hostname
@@ -84,4 +88,8 @@
 + /usr/share/plymouth/
 + /usr/share/plymouth/themes/
 + /usr/share/plymouth/themes/super-retropie/***
+# root-only network settings, copied nightly by retropie-backup-prep on the box
++ /var/
++ /var/backups/
++ /var/backups/super-retropie-etc/***
 - *

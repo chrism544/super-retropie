@@ -226,10 +226,12 @@ def preview(t):
     i = int(time.time() / 3) % len(pics)            # alternate every 3 s
     return pics[i], ('Main screen' if i == 0 else 'Game list') if len(pics) > 1 else ''
 
+exposed, drawn = True, 0
 while True:
     acts = []
     for e in pygame.event.get():
         if e.type == pygame.QUIT: sys.exit(0)
+        if e.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED, pygame.WINDOWFOCUSGAINED, pygame.WINDOWRESTORED): exposed = True
         if time.time() < ignore: continue
         if e.type == pygame.JOYBUTTONDOWN:
             acts.append({0: 'a', 1: 'b', 2: 'x', 3: 'y', 4: 'pgup', 5: 'pgdn'}.get(e.button))
@@ -271,6 +273,10 @@ while True:
                 msg = 'Removed' if rp('uninstall_theme', t['name']) else 'Remove failed'; installed(t, True)
     top = min(max(top, sel - ROWS + 1), sel)
 
+    # redraw only when something changed; once a second for the alternating previews / downloads
+    if not any(acts) and not exposed and time.time() - drawn < 1 and not shot:
+        clock.tick(30); continue
+    exposed, drawn = False, time.time()
     screen.blit(BG, (0, 0)) if BG else screen.fill((0, 0, 0))
     text('SETTINGS', 30, ACCENT_LT, (px(80), px(60)))
     text('EmulationStation Themes', 56, TEXT, (px(80), px(95)))
