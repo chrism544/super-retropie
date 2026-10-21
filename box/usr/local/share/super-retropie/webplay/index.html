@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Super RetroPie</title>
+<link rel="stylesheet" href="/play/static/menu.css?v=4">
+</head>
+<body>
+<div id="stage" class="stage">
+
+  <!-- system view: the TV's console carousel -->
+  <section id="systems" class="view" aria-label="Consoles">
+    <div class="carousel" id="carousel" role="listbox" aria-label="Consoles"></div>
+    <div class="sysinfo" id="sysinfo" aria-live="polite"></div>
+  </section>
+
+  <!-- gamelist view: list on the left, console card, artwork and details on the right -->
+  <section id="gamelist" class="view hide" aria-label="Games">
+    <!-- phone only: title bar and search -->
+    <div class="topbar"><button class="back" id="list-back" aria-label="Back to consoles">‹</button><h1 id="list-title"></h1></div>
+    <input class="search" id="search" type="search" placeholder="Search games" aria-label="Search games" autocomplete="off">
+    <ul class="list" id="list" role="listbox" aria-label="Games"></ul>
+    <img class="boxart" id="boxart" alt="">
+    <!-- the TV's detail area; on a phone it becomes a sheet over the list -->
+    <div class="detail" id="detail" role="dialog" aria-labelledby="detail-title">
+      <div class="sheet-head"><button class="back" id="detail-close" aria-label="Back to the list">‹</button><h2 id="detail-title"></h2></div>
+      <div class="rating" id="rating" aria-hidden="true"></div>
+      <img class="art" id="art" alt="">
+      <dl class="md">
+        <div class="m1"><dt>Players:</dt><dd id="md-players"></dd></div>
+        <div class="m2"><dt>Released:</dt><dd id="md-year"></dd></div>
+        <div class="m3"><dt>Genre:</dt><dd id="md-genre"></dd></div>
+        <div class="m4"><dt>Developer:</dt><dd id="md-dev"></dd></div>
+      </dl>
+      <p class="desc" id="desc"></p>
+      <div class="note" id="note"></div>
+      <button class="pill play" id="play-btn">▶ Play</button>
+    </div>
+  </section>
+
+  <!-- consoles that only work by streaming the TV -->
+  <section id="stream" class="view hide" aria-label="Streaming">
+    <div class="topbar"><button class="back" id="stream-back" aria-label="Back to consoles">‹</button><h1>Streaming</h1></div>
+    <img class="boxart" id="stream-card" alt="">
+    <div class="panel">
+      <h1 id="stream-title"></h1>
+      <p>This console is too demanding for a browser. Play it by streaming the TV to this device with <b>Moonlight</b> (Windows, Mac, Android and iPhone):</p>
+      <ol>
+        <li>Install Moonlight from <span class="kbd">moonlight-stream.org</span> and open it - it finds <b>Super RetroPie</b> by itself.</li>
+        <li>First time only: Moonlight shows a PIN. Enter it at <a id="sunshine" target="_blank" rel="noopener"></a> (Sunshine, on the box).</li>
+        <li>Choose <b>Super RetroPie</b>. You now control the TV's game menu - pick the game there.</li>
+      </ol>
+      <p id="stream-busy" class="warn"></p>
+      <p class="dim">The TV shows the same picture while you stream, so only one person can play.</p>
+    </div>
+  </section>
+
+  <!-- PIN, the same one the phone companion uses -->
+  <section id="login" class="view hide" aria-label="Enter PIN">
+    <div class="panel narrow">
+      <h1>Enter PIN</h1>
+      <p>You'll find it on the TV: RetroPie menu › Phone Companion.</p>
+      <input id="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="4-digit PIN">
+      <button id="pin-go" class="pill">Connect</button>
+      <p id="pin-msg" class="warn" role="alert"></p>
+    </div>
+  </section>
+
+  <div class="hints" id="hints"></div>
+  <div class="toast hide" id="toast" role="status"></div>
+</div>
+<script src="/play/static/menu.js?v=4"></script>
+</body>
+</html>

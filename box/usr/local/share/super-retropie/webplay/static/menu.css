@@ -1,0 +1,141 @@
+/* Super RetroPie web menu - a copy of the TV's EmulationStation look (bluray "Trading Card" theme).
+   Laptop: everything sits on a 16:9 stage and is placed with the theme's own numbers (fractions of the
+   screen), so cqw / cqh below are those fractions x 100. Phone (body.phone, at the end): the same parts
+   rearranged for a tall touch screen - card carousel, full-height game list, details as a sheet. */
+@font-face { font-family: Roboto; src: url(/play/theme/font.ttf) format("truetype"); font-weight: 500; font-display: swap; }
+:root { --accent: #116a9d; --accent-lt: #40aae6; --text: #f7f7f7; --dim: #96a5b4; --warn: #e6b450; --panel: #0e1620; --line: #1c2a3a;
+  --gloss: linear-gradient(#e9f6ff 0, #7fb9dc 18%, #2f7fb0 50%, #1c6a99 70%, #7fdcff 100%); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; color: var(--text); overflow: hidden;
+  font: 500 16px Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+body { display: grid; place-items: center; }
+.stage { position: relative; width: min(100vw, 177.78vh); height: min(56.25vw, 100vh); container-type: size;
+  overflow: hidden; background: #000; user-select: none; --slot: 20cqw; --mid: 40cqw; }
+.hide { display: none !important; }
+.view { position: absolute; inset: 0; }
+#systems { background: url(/play/theme/bg-system.png) center / 100% 100% no-repeat; }
+#gamelist, #stream, #login { background: url(/play/theme/bg-games.png) center / 100% 100% no-repeat; }
+.topbar, .search, .sheet-head, .play { display: none; }      /* phone only */
+button { font: inherit; }
+
+/* ---- system carousel: 5 cards, the middle one picked ---- */
+.carousel { position: absolute; left: 0; right: 0; top: 4cqh; height: 80cqh; touch-action: pan-y; }
+.card { position: absolute; left: 0; top: 0; height: 100%; width: var(--slot); display: grid; justify-items: center; cursor: pointer;
+  transition: transform .28s cubic-bezier(.2,.7,.3,1), opacity .28s; }
+.card img { height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: top; pointer-events: none;
+  transform: scale(.92); transform-origin: 50% 0; transition: transform .28s cubic-bezier(.2,.7,.3,1);
+  -webkit-mask-image: linear-gradient(#000 62%, transparent 98%); mask-image: linear-gradient(#000 62%, transparent 98%); }
+.card.on img { transform: scale(1.0); }
+.card .noart { margin-top: 18cqh; width: 85%; height: 45cqh; border-radius: 1.2cqh; border: .3cqh solid var(--accent);
+  background: linear-gradient(#0b2233, #000); display: grid; place-items: center; text-align: center; padding: 2cqh;
+  font-size: 3cqh; text-transform: uppercase; }
+.card .tag { position: absolute; top: 3.2cqh; right: 12%; padding: .3cqh 1cqh; border-radius: 99px; font-size: 1.5cqh;
+  background: var(--accent); color: #fff; text-transform: uppercase; letter-spacing: .05em; z-index: 1; }
+.sysinfo { position: absolute; left: 0; right: 0; top: 89.5cqh; text-align: center; color: #000; font-size: 1.9cqh; z-index: 2;
+  line-height: 4.2cqh; text-transform: uppercase; pointer-events: none; }
+
+/* ---- gamelist (detailed view) ---- */
+.list { position: absolute; left: 1cqw; top: 2.5cqh; width: 28cqw; height: 95cqh; margin: 0; padding: 0; list-style: none;
+  overflow: hidden; font-size: 3.6cqh; line-height: 1.5; text-transform: uppercase; }
+.list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); cursor: pointer; padding-left: .3cqw; }
+.list li.on { color: var(--accent); }
+.list li.fav::before { content: "★ "; color: var(--accent-lt); }
+.list li.empty { color: var(--dim); text-transform: none; font-size: 2.6cqh; white-space: normal; cursor: default; }
+.boxart { position: absolute; left: 31.5cqw; top: 12cqh; max-width: 60cqw; height: 90cqh; object-fit: contain; object-position: left top; }
+.detail { display: contents; }
+.rating { position: absolute; left: 35.3cqw; top: 5cqh; height: 4cqh; display: flex; gap: .4cqh; }
+.rating img { height: 100%; }
+.art { position: absolute; left: calc(75.5cqw - 14cqw); top: calc(32cqh - 19.5cqh); width: 28cqw; height: 39cqh; object-fit: contain; }
+.art:not([src]), .art[src=""] { visibility: hidden; }
+.md { margin: 0; font-size: 1.95cqh; }
+.md div { position: absolute; display: flex; white-space: nowrap; }
+.md dt { color: var(--accent); width: 6cqw; }
+.md dd { margin: 0; overflow: hidden; text-overflow: ellipsis; max-width: 18cqw; }
+.md .m1 { left: 53cqw; top: 57cqh; } .md .m2 { left: 53cqw; top: 59.5cqh; }
+.md .m3 { left: 75cqw; top: 57cqh; } .md .m4 { left: 75cqw; top: 59.5cqh; }
+.desc { position: absolute; left: 53cqw; top: 65.5cqh; width: 46cqw; height: 27cqh; margin: 0; font-size: 1.95cqh; line-height: 1.35;
+  overflow: hidden; white-space: pre-line; }
+.note { position: absolute; left: 53cqw; top: 93cqh; width: 46cqw; font-size: 1.7cqh; color: var(--warn); }
+
+/* ---- panels: streaming help, PIN ---- */
+.panel { position: absolute; left: 53cqw; top: 14cqh; width: 42cqw; font-size: 2.2cqh; line-height: 1.45; }
+.panel.narrow { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 34cqw; text-align: center; }
+.panel h1 { margin: 0 0 2cqh; font-size: 4.4cqh; font-weight: 500; text-transform: uppercase; color: var(--accent-lt); }
+.panel p, .panel ol { margin: 0 0 1.6cqh; } .panel ol { padding-left: 2.4cqw; } .panel li { margin-bottom: 1cqh; }
+.panel a { color: var(--accent-lt); overflow-wrap: anywhere; }
+.kbd { color: var(--accent-lt); }
+.dim { color: var(--dim); } .warn { color: var(--warn); min-height: 1.4em; }
+#pin { display: block; width: 100%; margin: 2cqh 0; padding: 1.6cqh; font: 500 4cqh Roboto, sans-serif; text-align: center;
+  letter-spacing: .6em; color: var(--text); background: #05080c; border: .25cqh solid var(--accent); border-radius: 1.2cqh; }
+.pill { display: inline-block; padding: 1.4cqh 5cqw; border: .25cqh solid #cfeeff; border-radius: 99px; color: #fff;
+  font: 500 2.4cqh Roboto, sans-serif; text-transform: uppercase; cursor: pointer; background: var(--gloss); }
+:focus-visible { outline: .35cqh solid var(--accent-lt); outline-offset: .3cqh; }
+
+/* ---- help line and messages ---- */
+.hints { position: absolute; right: 1.5cqw; bottom: 3.3cqh; font-size: 1.6cqh; color: var(--accent); text-transform: uppercase;
+  letter-spacing: .04em; display: flex; gap: 1.6cqw; }
+.hints b { color: var(--text); font-weight: 500; margin-right: .4cqw; }
+.toast { position: absolute; left: 50%; top: 4cqh; transform: translateX(-50%); padding: 1.2cqh 2.4cqw; border-radius: 99px; z-index: 30;
+  background: var(--panel); border: .2cqh solid var(--accent); font-size: 2cqh; max-width: 80cqw; text-align: center; }
+
+/* ================= phone ================= */
+body.phone .stage { width: 100vw; height: 100vh; height: 100dvh; --slot: 46cqw; --mid: 27cqw; }
+body.phone .view { padding-top: env(safe-area-inset-top); }
+body.phone #systems, body.phone #gamelist, body.phone #stream, body.phone #login {
+  background: linear-gradient(var(--accent), var(--accent)) 50% calc(env(safe-area-inset-top) + 10px) / calc(100% - 24px) 3px no-repeat,
+              linear-gradient(var(--accent), var(--accent)) 50% calc(100% - env(safe-area-inset-bottom) - 10px) / calc(100% - 24px) 3px no-repeat, #000; }
+body.phone .hints { display: none; }
+body.phone .toast { font-size: 15px; padding: 10px 18px; top: calc(env(safe-area-inset-top) + 20px); max-width: 90vw; }
+
+/* carousel: three cards, swipe or tap the side ones */
+body.phone .carousel { top: calc(env(safe-area-inset-top) + 9cqh); height: min(68cqh, 120cqw); }
+body.phone .card .tag { font-size: 11px; padding: 2px 8px; top: 3.5%; }
+body.phone .card .noart { margin-top: 20%; height: 50%; font-size: 18px; }
+body.phone .sysinfo { top: auto; bottom: calc(env(safe-area-inset-bottom) + 7cqh); left: 50%; right: auto; transform: translateX(-50%);
+  min-width: 62vw; padding: 12px 24px; border-radius: 99px; border: 2px solid #cfeeff; background: var(--gloss);
+  font-size: 14px; line-height: 1.2; letter-spacing: .04em; }
+body.phone .sysinfo::after { content: "Tap the card to open"; display: block; font-size: 11px; margin-top: 2px; opacity: .75; }
+
+/* game list: title bar, search, scrolling list */
+body.phone .topbar { display: flex; align-items: center; gap: 6px; position: absolute; left: 0; right: 0;
+  top: calc(env(safe-area-inset-top) + 18px); height: 48px; padding: 0 12px; }
+body.phone .topbar h1, body.phone .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 500; text-transform: uppercase;
+  color: var(--accent-lt); letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.phone .back { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--panel); color: var(--text);
+  font-size: 28px; line-height: 1; cursor: pointer; }
+body.phone .search { display: block; position: absolute; left: 16px; right: 16px; top: calc(env(safe-area-inset-top) + 74px);
+  padding: 11px 14px; border-radius: 99px; border: 1px solid var(--line); background: #05080c; color: var(--text); font: 500 16px Roboto, sans-serif; }
+body.phone .list { left: 0; width: 100%; top: calc(env(safe-area-inset-top) + 126px); bottom: calc(env(safe-area-inset-bottom) + 22px);
+  height: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; font-size: 16px; line-height: 1.3; padding: 0 16px; }
+body.phone .list li { padding: 13px 4px; border-bottom: 1px solid var(--line); white-space: normal; }
+body.phone .list li.on { color: var(--accent-lt); }
+body.phone .list li.empty { font-size: 15px; border: 0; }
+body.phone #boxart, body.phone #stream-card { display: none; }
+
+/* details: a sheet over the list */
+body.phone .detail { display: none; position: absolute; inset: 0; z-index: 10; background: #000; overflow-y: auto;
+  padding: calc(env(safe-area-inset-top) + 18px) 16px calc(env(safe-area-inset-bottom) + 96px); }
+body.phone .detail.open { display: block; }
+body.phone .sheet-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+body.phone .sheet-head h2 { white-space: normal; }
+body.phone .detail > * { position: static; }
+body.phone .art { display: block; width: 100%; height: auto; max-height: 36vh; margin: 0 auto 12px; }
+body.phone .rating { height: 18px; margin: 0 0 12px; }
+body.phone .md { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 14px; margin-bottom: 14px; }
+body.phone .md div { position: static; display: block; white-space: normal; }
+body.phone .md dt { width: auto; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+body.phone .md dd { max-width: none; }
+body.phone .desc { width: auto; height: auto; font-size: 15px; line-height: 1.5; overflow: visible; color: #d9e2ea; }
+body.phone .note { width: auto; margin-top: 12px; font-size: 14px; }
+body.phone .play { display: block; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 24px);
+  width: min(320px, calc(100vw - 48px)); padding: 15px; font-size: 18px; z-index: 11; }
+
+/* streaming help, PIN */
+body.phone .panel { position: absolute; left: 16px; right: 16px; width: auto; top: calc(env(safe-area-inset-top) + 82px);
+  font-size: 15px; line-height: 1.5; transform: none; }
+body.phone .panel.narrow { top: 50%; transform: translateY(-50%); text-align: center; }
+body.phone .panel h1 { font-size: 22px; } body.phone .panel ol { padding-left: 20px; }
+body.phone #pin { font-size: 28px; padding: 12px; margin: 16px 0; border-width: 2px; border-radius: 12px; }
+body.phone .pill { padding: 13px 40px; font-size: 16px; border-width: 2px; }
+body.phone :focus-visible { outline-width: 3px; }
+@media (prefers-reduced-motion: reduce) { .card, .card img { transition: none; } }

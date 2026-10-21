@@ -83,7 +83,8 @@ pre.log{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:aut
 @media (min-width:1400px){.wrap{max-width:1280px}nav div{max-width:1216px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (orientation:landscape) and (max-height:500px){nav button span{display:none}nav button{min-height:44px}main{padding-bottom:calc(72px + var(--sb))}}
-<header class="wrap"><h1>Super RetroPie Control Center</h1>
+.playgames{display:inline-flex;align-items:center;gap:6px;margin-top:10px;text-decoration:none;font-weight:600}</style></head><body>
+<header class="wrap"><h1>Super RetroPie Control Center</h1><a class="pill playgames" href="/play">&#9654; Play games</a>
 <div id="conn" class="conn" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="conntext">Connecting to Super RetroPie…</span><button id="retry" class="pill hide" onclick="start()">Retry</button></div></header>
 
 <section id="login" class="wrap hide"><main class="login"><div class="card"><h2>Pair this device</h2>

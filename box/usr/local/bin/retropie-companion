@@ -332,5 +332,10 @@ if __name__ == '__main__':
         companion_advanced.install(Handler)
     except Exception as e:
         print('advanced not loaded:', e, flush=True)
+    try:                                            # web play: /play here and on HTTPS port 8443 (webplay.py)
+        import sys; sys.path.insert(0, '/usr/local/lib/retropie'); import webplay
+        webplay.install(Handler); webplay.serve_https(Handler)
+    except Exception as e:
+        print('webplay not loaded:', e, flush=True)
     ThreadingHTTPServer.daemon_threads = True
     ThreadingHTTPServer(('', PORT), Handler).serve_forever()
