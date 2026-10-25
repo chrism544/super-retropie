@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""A controller (re)connected - if Kodi is open, reload its joystick driver so it reads the new device.
+Kodi 20 keeps reading the old /dev/input/jsN after a Bluetooth pad sleeps and reconnects ("ScanEvents:
+failed to read joystick ... No such device") and ignores the pad until restarted. Run by
+kodi-pad-rescan.service, started by /etc/udev/rules.d/90-kodi-pad-rescan.rules. Playback is unaffected."""
+import fcntl, json, socket, subprocess, sys, time
+
+if subprocess.run(['pgrep', '-x', 'kodi.bin'], capture_output=True).returncode:
+    sys.exit(0)                                     # Kodi closed - it finds the pad when it next opens
+lock = open('/tmp/kodi-pad-rescan.lock', 'w')
+fcntl.flock(lock, fcntl.LOCK_EX)
+time.sleep(2)                                       # let the new device settle (a pad brings up several)
+
+
+def rpc(method, **params):
+    s = socket.create_connection(('127.0.0.1', 9090), 5)
+    s.sendall(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': params}).encode())
+    return json.loads(s.recv(65536)).get('result')
+
+
+try:
+    rpc('Addons.SetAddonEnabled', addonid='peripheral.joystick', enabled=False)
+    time.sleep(1.5)
+    rpc('Addons.SetAddonEnabled', addonid='peripheral.joystick', enabled=True)
+    subprocess.run(['logger', '-t', 'kodi-pad-rescan', 'controller connected - Kodi joystick driver reloaded'])
+except OSError as e:                                # Kodi still starting or closing
+    subprocess.run(['logger', '-t', 'kodi-pad-rescan', 'Kodi not reachable: %s' % e])

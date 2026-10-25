@@ -1,0 +1,60 @@
+#!/bin/bash
+# Launch Kodi and restore menu music on every exit path.
+set -u
+export DISPLAY=${DISPLAY:-:0}
+mkdir -p "$HOME/.cache" "$HOME/.kodi/temp"
+exec 9>"$HOME/.cache/retropie-kodi.lock"
+flock -n 9 || exit 0
+if pgrep -u "$(id -u)" -x kodi.bin >/dev/null; then
+    command -v xdotool >/dev/null && xdotool search --class kodi windowactivate 2>/dev/null
+    exit 0
+fi
+LOG=$HOME/.kodi/temp/kodi.log
+MARK=$(mktemp /tmp/retropie-kodi.XXXXXX)
+pid=
+cleanup() {
+    rm -f "$MARK"
+    /usr/local/bin/retropie-music resume >/dev/null 2>&1 || true
+}
+stop_kodi() {
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -TERM -- "-$pid" 2>/dev/null || true
+        for ((i=0; i<5; i++)); do
+            kill -0 -- "-$pid" 2>/dev/null || return
+            sleep 1
+        done
+        kill -KILL -- "-$pid" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'stop_kodi; exit 130' INT
+trap 'stop_kodi; exit 143' TERM HUP
+/usr/local/bin/retropie-music pause >/dev/null 2>&1 || true
+if [ -f "$HOME/.local/bin/retropie-livetv-groups.py" ]; then
+    timeout 10 python3 "$HOME/.local/bin/retropie-livetv-groups.py" >>"$HOME/.kodi/temp/country-groups.log" 2>&1 || true
+fi
+timeout 10 /usr/local/bin/kodi-tv-views 2>/dev/null || true
+# Recovery only signals the process group started by this launcher.
+setsid /usr/bin/kodi -fs 9>&- >>"$HOME/.kodi/temp/retropie-launcher.log" 2>&1 &
+pid=$!
+/usr/local/bin/retropie-mute-es "$pid" >/dev/null 2>&1 &   # no menu screensaver sound behind Kodi
+while kill -0 "$pid" 2>/dev/null; do
+    sleep 2
+    if [ "$LOG" -nt "$MARK" ] && grep -qE 'Application stopped|Stopping the application' "$LOG"; then
+        for ((i=0; i<10; i++)); do   # Kodi can hang ~40 s closing (Python add-ons), then crash
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            logger -t retropie-kodi 'Kodi shutdown timed out; ending its launch group'
+            stop_kodi
+        fi
+        break
+    fi
+done
+wait "$pid"
+status=$?
+if [ "$status" -ne 0 ]; then
+    logger -t retropie-kodi "Kodi exited with status $status; see ~/.kodi/temp/retropie-launcher.log"
+fi
+exit "$status"

@@ -13,4 +13,6 @@ if [ -s /tmp/retropie-fresh-request ]; then
 fi
 # keep the launch screen up until the game window shows (no black terminal in between)
 setsid /usr/local/bin/retropie-launchscreen-handoff </dev/null >/dev/null 2>&1 &
+# European (PAL) games: TV to 50 Hz (runcommand-onend puts 60 Hz back)
+/usr/local/bin/retropie-pal-refresh "$1" "$2" "$3" >/dev/null 2>&1
 exit 0

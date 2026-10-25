@@ -1,0 +1,7 @@
+[Unit]
+Description=Reload Kodi's joystick driver after a controller connects
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/usr/local/bin/kodi-pad-rescan

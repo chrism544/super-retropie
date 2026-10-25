@@ -1,0 +1,2 @@
+# A controller connected (e.g. the Xbox pad waking up): let an open Kodi pick it up - kodi-pad-rescan
+ACTION=="add", SUBSYSTEM=="input", KERNEL=="js[0-9]*", ATTRS{name}!="libvirtualhid*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="kodi-pad-rescan.service"

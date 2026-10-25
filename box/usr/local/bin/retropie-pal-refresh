@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""A European (PAL) game is starting: show it at 50 Hz. Run from runcommand-onlaunch.sh.
+
+European consoles ran at 50 Hz, so their games run at 50 frames a second. On a 60 Hz TV the
+emulator either runs them fast or keeps stretching the sound - crackles and wrong pitch (Oct 2026:
+Zelda Ocarina of Time Master Quest (E) on N64). RetroArch's own refresh switch does nothing on this
+box, so this switches the TV to 1080p 50 Hz and tells RetroArch (video_refresh_rate in runcommand's
+/dev/shm/retroarch.cfg, which RetroArch reads after it). runcommand-onend.sh puts 60 Hz back
+(retropie-display-mode).
+
+European game = a name tag like (E), (Europe), (PAL), (UK), (Germany) and no US/Japan/World tag -
+multi-region dumps usually run at 60 Hz. ZX Spectrum and Amstrad CPC always run at 50 Hz.
+
+  retropie-pal-refresh <system> <emulator> <rom>      what runcommand passes
+  retropie-pal-refresh --check <system> <rom>...      say which would switch, change nothing
+"""
+import os, re, subprocess, sys, time
+
+PAL_SYSTEMS = {'nes', 'fds', 'snes', 'n64', 'megadrive', 'mastersystem', 'segacd', 'sega32x', 'psx',
+               'saturn', 'atari2600', 'atari7800'}
+ALWAYS_50 = {'zxspectrum', 'amstradcpc'}
+EUROPE = {'e', 'eu', 'europe', 'pal', 'uk', 'a', 'australia', 'g', 'germany', 'f', 'france', 's', 'spain',
+          'i', 'italy', 'sw', 'sweden', 'nl', 'netherlands', 'scandinavia', 'de', 'fr', 'es', 'it'}
+NOT_EUROPE = {'u', 'us', 'usa', 'j', 'japan', 'world', 'ju', 'jue', 'ue', 'uj', 'ntsc', 'brazil', 'korea', 'asia'}
+CFG = '/dev/shm/retroarch.cfg'
+
+
+def sega_header_europe_only(rom):
+    """Mega Drive / 32X: Genesis Plus GX and PicoDrive pick the region from the cartridge header
+    (0x1F0), USA first - many (E) dumps say 'JUE' there and run at 60 Hz. True only for a header
+    that allows Europe and not USA. Unreadable (e.g. .smd interleaved) -> False, stay at 60 Hz."""
+    try:
+        if rom.lower().endswith('.zip'):
+            import zipfile
+            with zipfile.ZipFile(rom) as z:
+                name = next(n for n in z.namelist() if n.lower().endswith(('.md', '.bin', '.gen', '.32x')))
+                data = z.open(name).read(0x200)
+        else:
+            data = open(rom, 'rb').read(0x200)
+    except (OSError, StopIteration, ValueError):
+        return False
+    if data[0x100:0x104] != b'SEGA' and data[0x101:0x105] != b'SEGA':
+        return False
+    region = data[0x1F0:0x1F3].decode('ascii', 'replace').strip().upper()
+    if len(region) == 1 and region in '0123456789ABCDEF' and region not in 'EJU':   # newer style: bit flags
+        bits = int(region, 16)
+        return bool(bits & 8) and not bits & 4
+    return 'E' in region and 'U' not in region
+
+
+def is_pal(system, rom):
+    if system in ALWAYS_50:
+        return True
+    if system not in PAL_SYSTEMS:
+        return False
+    tags = {t.lower() for g in re.findall(r'\(([^)]*)\)', os.path.basename(rom)) for t in re.split(r'[,\s]+', g) if t}
+    if not tags & EUROPE or tags & NOT_EUROPE:
+        return False
+    return sega_header_europe_only(rom) if system in ('megadrive', 'sega32x') else True
+
+
+def switch():
+    env = dict(os.environ, DISPLAY=os.environ.get('DISPLAY', ':0'))
+    x = subprocess.run(['xrandr'], capture_output=True, text=True, env=env).stdout
+    out = next((l.split()[0] for l in x.splitlines() if ' connected' in l), None)   # the TV's output
+    rates, capture = [], False
+    for l in x.splitlines():                      # refresh rates the TV offers at 1920x1080
+        if not l.startswith(' '):
+            capture = l.split()[0] == out
+        elif capture and l.split()[0] == '1920x1080':
+            rates = [r.strip('*+') for r in l.split()[1:]]
+    if not out or '50.00' not in rates:
+        return 'no 1080p 50 Hz mode on ' + str(out)
+    if subprocess.run(['xrandr', '--output', out, '--mode', '1920x1080', '--rate', '50'], env=env).returncode:
+        return 'xrandr could not switch'
+    try:                                          # RetroArch: the screen is now 50 Hz
+        lines = [l for l in open(CFG).read().splitlines() if not l.startswith('video_refresh_rate')]
+        open(CFG, 'w').write('\n'.join(lines + ['video_refresh_rate = "50"']) + '\n')
+    except OSError:
+        pass                                      # not a RetroArch game - the switch is enough
+    return 'switched %s to 1080p 50 Hz' % out
+
+
+def current_rate():
+    env = dict(os.environ, DISPLAY=os.environ.get('DISPLAY', ':0'))
+    m = re.search(r'([0-9.]+)\*', subprocess.run(['xrandr'], capture_output=True, text=True, env=env).stdout)
+    return m.group(1) if m else ''
+
+
+def reassert():
+    """The screen goes back to 60 Hz while the game starts (seen 25 Oct 2026: switched at 15:23:59,
+    60 Hz again before the game was up; once running it stays) - so look again a few times."""
+    for wait in (3, 5, 7):
+        time.sleep(wait)
+        if subprocess.run(['/usr/local/bin/retropie-game-running'], capture_output=True).returncode:
+            return                                  # game already over - onend restores 60 Hz
+        if current_rate() != '50.00':
+            subprocess.run(['logger', '-t', 'retropie-pal-refresh', 'back at %s Hz while starting - %s'
+                            % (current_rate(), switch())])
+
+
+if sys.argv[1:2] == ['--reassert']:
+    reassert()
+    sys.exit(0)
+if sys.argv[1:2] == ['--check']:
+    system = sys.argv[2]
+    for rom in sys.argv[3:]:
+        print('50 Hz' if is_pal(system, rom) else '  -  ', os.path.basename(rom))
+    sys.exit(0)
+if len(sys.argv) >= 4 and is_pal(sys.argv[1], sys.argv[3]):
+    subprocess.run(['logger', '-t', 'retropie-pal-refresh', '%s: %s' % (os.path.basename(sys.argv[3]), switch())])
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), '--reassert'], start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

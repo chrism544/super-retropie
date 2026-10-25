@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Keep EmulationStation quiet while Kodi runs. Oct 2026: Kodi started outside the menu (not via
+runcommand) leaves ES idle, so after 5 min its video screensaver plays - with sound - behind Kodi.
+Mutes ES sound streams every few seconds until the given Kodi process ends, then unmutes them."""
+import re, subprocess, sys, time, os
+def es_inputs():
+    out = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True).stdout
+    return [(m.group(1), "Mute: yes" in b) for b in out.split("Sink Input #")[1:]
+            if "\"emulationstation\"" in b for m in [re.match(r"(\d+)", b)] if m]
+def mute(i, on):
+    subprocess.run(["pactl", "set-sink-input-mute", i, "1" if on else "0"], capture_output=True)
+pid = int(sys.argv[1])
+while os.path.exists("/proc/%d" % pid):
+    for i, muted in es_inputs():
+        if not muted:
+            mute(i, True)
+    time.sleep(3)
+for i, muted in es_inputs():
+    mute(i, False)

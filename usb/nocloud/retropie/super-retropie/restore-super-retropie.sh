@@ -119,6 +119,20 @@ if [ $BEZELS = 1 ] && [ -f $H/install-bezels.py ]; then
     sudo -u $U -H python3 $H/install-bezels.py || echo "!! bezels failed - run: python3 ~/install-bezels.py"
 fi
 
+step "Ship of Harkinian (Ports)"
+# the kit has its launcher and settings; the app is the official 9.3.0 release, checked (Oct 2026)
+SOH=/opt/retropie/ports/soh
+if [ -f $SOH/soh.sh ] && [ ! -x $SOH/app/AppRun ] &&
+   curl -fsSL -o /tmp/soh.appimage https://github.com/HarbourMasters/Shipwright/releases/download/9.3.0/SoH-Dewey-Alpha.appimage &&
+   echo "8507bb70413e130e452ebaf5f156bfd78013ee0144364b7968680e8cf064a0fa  /tmp/soh.appimage" | sha256sum -c --quiet; then
+    chmod +x /tmp/soh.appimage && (cd /tmp && ./soh.appimage --appimage-extract >/dev/null) &&
+        rm -rf $SOH/app && mv /tmp/squashfs-root $SOH/app && chown -R $U:$U $SOH
+    rm -f /tmp/soh.appimage
+    echo "  game data: see README.md (Ship of Harkinian)"
+else
+    [ -x $SOH/app/AppRun ] || echo "!! Ship of Harkinian download failed or checksum wrong"
+fi
+
 step "services and timers"
 systemctl daemon-reload
 for u in /etc/systemd/system/retropie-*.timer; do systemctl enable "$(basename "$u")"; done

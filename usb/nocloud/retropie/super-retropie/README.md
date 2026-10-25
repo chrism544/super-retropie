@@ -21,6 +21,10 @@ What's **not** in it (private, copyrighted or too big): games, BIOS files, saves
 Sunshine passwords/pairing, scraped artwork. Saves, BIOS and artwork are in the nightly
 Proxmox backup.
 
+Ship of Harkinian (Ports) comes back without its game data: copy the two Ocarina of Time N64
+files (US v1.2 and Master Quest PAL) into `/opt/retropie/ports/soh/home/`, start it once and
+answer Yes to both questions; it builds `oot.o2r` / `oot-mq.o2r`, then the copies can go.
+
 ## Rebuilding a box
 
 1. Run `Prepare-RetroPieUsb.ps1` as usual. The kit rides along on the stick, and the

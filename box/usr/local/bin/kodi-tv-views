@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""TV navigation views for Aeon MQ 9 - run once just before Kodi starts (Kodi rewrites its settings
+when it exits, so they can only be changed while it is closed).
+  seasons  -> Shelf (view 63): one row of season posters - the default wrap-around carousel showed
+              3 seasons as 1,2,3,1,2,3 with ".." tiles in between
+  episodes -> list (view 55): a scrolling list, no wrap-around
+Only once (marker file), so a view chosen later in Kodi is kept."""
+import os, re
+G = os.path.expanduser('~/.kodi/userdata/guisettings.xml')
+MARK = os.path.expanduser('~/.kodi/userdata/.tv-views-set')
+VIEWS = {'videonavseasons': 63, 'videonavepisodes': (1 << 16) | 55}    # Kodi stores TYPE << 16 | ID
+
+if os.path.exists(G) and not os.path.exists(MARK):
+    t = open(G, encoding='utf-8').read()
+    for state, mode in VIEWS.items():
+        t2, n = re.subn(r'(<%s>\s*<viewmode>)\d+(</viewmode>)' % state, r'\g<1>%d\g<2>' % mode, t)
+        if not n:      # Kodi hasn't saved that view yet - add it
+            block = '        <%s>\n            <viewmode>%d</viewmode>\n            <sortmethod>1</sortmethod>\n            <sortorder>1</sortorder>\n        </%s>\n' % (state, mode, state)
+            t2 = t.replace('</viewstates>', block + '    </viewstates>', 1)
+        t = t2
+    open(G, 'w', encoding='utf-8').write(t)
+    open(MARK, 'w').close()

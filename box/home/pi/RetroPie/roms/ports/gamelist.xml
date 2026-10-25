@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<gameList>
+  <game>
+    <path>./Ship of Harkinian.sh</path>
+    <name>Zelda: Ocarina of Time (Ship of Harkinian)</name>
+    <desc>The PC version of Ocarina of Time: free camera on the right stick, widescreen, 60 fps. Choose Master Quest when you start a new file. Controller: X / Y / RB = C-left / C-right / C-down, click the right stick = C-up (look). Hold View + Menu to quit.</desc>
+    <image>/opt/retropie/ports/soh/icon.png</image>
+    <genre>Action adventure</genre>
+  </game>
+</gameList>

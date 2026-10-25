@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Loading screen when you leave Kodi for Super RetroPie (Kodi's "Super RetroPie" favourite runs
+this, then quits). Kodi takes a few seconds to close and the screen otherwise looks frozen, so the
+chosen Super RetroPie loading picture (same as retropie-loading) stays on top until Kodi has gone,
+then the screen goes back to EmulationStation. Gives up after 30 seconds."""
+import fcntl, json, os, subprocess, time
+from pathlib import Path
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+os.environ.setdefault('DISPLAY', ':0')
+lock_path = Path.home() / '.cache/retropie-kodi-return.lock'
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+lock = lock_path.open('w')
+try:
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    raise SystemExit(0)
+STYLES = ('super', 'consoles', 'minimal', 'playstation', 'n64', 'gamecube', 'ps2', 'ps3', 'xbox', 'wii', 'wiiu', 'xbox360')
+try:
+    style = json.load(open(os.path.expanduser('~/.config/retropie-splash.json'))).get('style', 'super')
+except Exception:
+    style = 'super'
+image_path = Path('/usr/local/share/retropie-splash') / (style + '.png')
+if style not in STYLES or not image_path.is_file():
+    image_path = Path('/usr/local/share/retropie-splash/super.png')
+    if not image_path.is_file():
+        image_path = Path('/usr/local/share/retropie-splash/consoles.png')
+
+import pygame
+pygame.display.init()
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.NOFRAME)
+pygame.display.set_caption('Super RetroPie loading')
+pygame.mouse.set_visible(False)
+W, H = screen.get_size()
+try:
+    img = pygame.transform.smoothscale(pygame.image.load(str(image_path)).convert(), (W, H))
+except (pygame.error, OSError):
+    img = pygame.Surface((W, H))
+    img.fill((12, 18, 30))
+pygame.font.init()
+font = pygame.font.Font(None, max(24, int(H * 0.037)))
+shade = pygame.Surface((W, int(H * 0.16)), pygame.SRCALPHA)
+shade.fill((8, 12, 22, 220))
+
+
+def kodi_running():
+    return subprocess.run(['pgrep', '-x', 'kodi.bin'], capture_output=True).returncode == 0
+
+
+start = time.monotonic()
+time.sleep(0.2)
+wid = subprocess.run(['xdotool', 'search', '--name', '^Super RetroPie loading$'], capture_output=True, text=True).stdout.split()
+gone_since = None
+while time.monotonic() - start < 30:
+    for e in pygame.event.get():
+        pass
+    screen.blit(img, (0, 0))
+    screen.blit(shade, (0, H - shade.get_height()))
+    label = font.render('Returning to Super RetroPie', True, (245, 248, 255))
+    screen.blit(label, label.get_rect(center=(W // 2, int(H * 0.90))))
+    pygame.display.flip()
+    for w in wid:                                   # stay above Kodi's full-screen window
+        subprocess.run(['xdotool', 'windowraise', w], capture_output=True)
+    if kodi_running():
+        gone_since = None
+    elif gone_since is None:
+        gone_since = time.monotonic()
+    elif time.monotonic() - gone_since > 0.8:            # Kodi closed and EmulationStation is back underneath
+        break
+    time.sleep(0.2)
+pygame.quit()
+time.sleep(0.3)
+for w in subprocess.run(['xdotool', 'search', '--class', 'emulationstation'], capture_output=True, text=True).stdout.split():
+    subprocess.run(['xdotool', 'windowactivate', w], capture_output=True)

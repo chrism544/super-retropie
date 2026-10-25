@@ -111,12 +111,13 @@ sed -i -E \
     -e 's/^#?\s*Privacy\s*=.*/Privacy = device/' \
     -e 's/^#?\s*AutoEnable\s*=.*/AutoEnable=true/' \
     /etc/bluetooth/main.conf
-# Only lengthen the link timeout (2 s) so brief signal fades don't disconnect.
+# Only lengthen the link timeout (6 s) so brief signal fades don't disconnect. 2 s still dropped
+# the Xbox pad every few minutes (Oct 2026), worse while the soundbar shares the adapter.
 # Do NOT set Min/MaxConnectionInterval - forcing 7-9 caused constant dropouts on the Alto.
 grep -q '^\[LE\]' /etc/bluetooth/main.conf || echo '[LE]' >> /etc/bluetooth/main.conf
 grep -q '^ConnectionSupervisionTimeout' /etc/bluetooth/main.conf \
-    && sed -i 's/^ConnectionSupervisionTimeout.*/ConnectionSupervisionTimeout=200/' /etc/bluetooth/main.conf \
-    || sed -i '/^\[LE\]/a ConnectionSupervisionTimeout=200' /etc/bluetooth/main.conf
+    && sed -i 's/^ConnectionSupervisionTimeout.*/ConnectionSupervisionTimeout=600/' /etc/bluetooth/main.conf \
+    || sed -i '/^\[LE\]/a ConnectionSupervisionTimeout=600' /etc/bluetooth/main.conf
 # USB power-saving on Bluetooth dongles causes dropouts
 echo 'options btusb enable_autosuspend=0' > /etc/modprobe.d/btusb-no-autosuspend.conf
 rfkill unblock all || true

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Live TV and Radio: the controller triggers move left (LT) and right (RT) - Oct 2026 -->
+<keymap>
+  <TVChannels>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </TVChannels>
+  <RadioChannels>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </RadioChannels>
+  <TVGuide>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </TVGuide>
+  <RadioGuide>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </RadioGuide>
+  <TVSearch>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </TVSearch>
+  <RadioSearch>
+    <joystick profile="game.controller.default">
+      <lefttrigger>Left</lefttrigger>
+      <righttrigger>Right</righttrigger>
+    </joystick>
+  </RadioSearch>
+</keymap>
